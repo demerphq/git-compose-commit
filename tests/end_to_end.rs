@@ -157,6 +157,13 @@ fn help_switches_between_synopsis_and_detailed_guide() {
     assert!(String::from_utf8_lossy(&forced_short.stdout).contains("Use --help"));
     let forced_long = run_composer(repo.path(), &["--help=long"]);
     assert!(String::from_utf8_lossy(&forced_long.stdout).contains("--table-rows ROWS"));
+
+    let version = run_composer(repo.path(), &["--version"]);
+    assert!(version.status.success());
+    assert_eq!(
+        String::from_utf8(version.stdout).expect("version output is UTF-8"),
+        format!("git-compose-commit {}\n", env!("CARGO_PKG_VERSION"))
+    );
 }
 
 #[test]

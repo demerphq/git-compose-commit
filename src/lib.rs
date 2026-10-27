@@ -41,6 +41,7 @@ fn synopsis() -> &'static str {
 Usage: git-compose-commit [COMPOSE OPTIONS] [GIT OPTIONS] [-- PATHSPEC...]
 
 Common options: --subject, --text, --line, --th, --tr, --list-item
+Other: --version
 Use --help for the full option guide."
 }
 
@@ -52,6 +53,7 @@ Usage: git-compose-commit [COMPOSE OPTIONS] [GIT OPTIONS] [-- PATHSPEC...]
 Compose options:
   -h, --help=short     Show a concise synopsis
   --help, --help=long  Show this detailed guide
+  --version            Show the program version
   --subject TEXT       Set the subject; may be given once
   --text TEXT          Add a paragraph, wrapped at 72 characters
   --detail TEXT        Add an unwrapped block, indented by four spaces

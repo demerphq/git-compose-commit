@@ -31,7 +31,8 @@ cargo install --path .
 
 You need Git and a Rust toolchain. Use `git-compose-commit -h` (or
 `--help=short`) for a compact synopsis, and `git-compose-commit --help` (or
-`--help=long`) for the detailed option guide.
+`--help=long`) for the detailed option guide. Use `--version` to print the
+installed version.
 
 ## Compose a message
 
