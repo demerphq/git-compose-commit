@@ -13,7 +13,7 @@ git-compose-commit --compose-subject 'Fix cache invalidation' \
   --compose-list-item 'Refresh the cache' \
   --compose-list-item 'Verify the new value' \
   --compose-list-end \
-  --compose-list=points \
+  --compose-list=bullets \
   --compose-list-item 'Keep the update atomic' \
   --compose-text 'Refresh the cache after writes [#1]' \
   --compose-footer-1 'The generation counter now advances only after a successful write.' \
@@ -42,7 +42,7 @@ ignored. Every reference must have a matching `--compose-footer-N`, and every
 footer must be referenced. Footers are appended after the other sections in
 number order, with their labels aligned and their text wrapped to fit.
 
-Lists use `--compose-list=numbered` or `--compose-list=points`, followed by one or more
+Lists use `--compose-list=numbered` or `--compose-list=bullets`, followed by one or more
 `--compose-list-item` options. A list item without an active list starts a
 numbered list automatically. Starting a list inside an open list nests it; use
 `--compose-list-end` to return to the parent. Lists also end automatically when

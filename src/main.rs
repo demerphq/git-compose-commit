@@ -25,7 +25,7 @@ enum Section {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ListKind {
     Numbered,
-    Points,
+    Bullets,
 }
 
 #[derive(Debug)]
@@ -49,7 +49,7 @@ Message options:
   --compose-th CSV         Short form of --compose-table-head
   --compose-tr CSV         Short form of --compose-table-row
   --compose-footer-N TEXT  Define footer N for a [#N] reference
-  --compose-list KIND      Start a numbered or points list (lists can nest)
+  --compose-list KIND      Start a numbered or bullets list (lists can nest)
   --compose-list-item TEXT Add an item; defaults to a numbered list if needed
   --compose-list-end       End the current explicit list
 
@@ -322,8 +322,8 @@ fn parse_args(
                 "--compose-list" => {
                     let kind = match value.as_str() {
                         "numbered" => ListKind::Numbered,
-                        "points" => ListKind::Points,
-                        _ => return Err("--compose-list must be 'numbered' or 'points'".into()),
+                        "bullets" => ListKind::Bullets,
+                        _ => return Err("--compose-list must be 'numbered' or 'bullets'".into()),
                     };
                     list_stack.push(kind);
                     if active_list_section.is_none() {
@@ -464,7 +464,7 @@ fn format_list(items: &[ListEntry]) -> String {
                 counters[item.depth] += 1;
                 format!("{}. ", counters[item.depth])
             }
-            ListKind::Points => "* ".to_owned(),
+            ListKind::Bullets => "* ".to_owned(),
         };
         let indent = "  ".repeat(item.depth);
         let first_prefix = format!("{indent}{marker}");
@@ -726,7 +726,7 @@ mod tests {
         let (subject, sections, footers, _) = parse_args(args(&[
             "--compose-list-item=first",
             "--compose-list-item=second",
-            "--compose-list=points",
+            "--compose-list=bullets",
             "--compose-list-item=nested",
             "--compose-list-end",
             "--compose-list-item=third",
