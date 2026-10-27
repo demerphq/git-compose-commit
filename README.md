@@ -1,66 +1,85 @@
 # git-compose-commit
 
 `git-compose-commit` assembles a commit message from named sections, then runs
-`git commit` with that message. Any other arguments are passed through to Git.
+`git commit`. Git commit options are passed through.
 
 ```sh
-git-compose-commit --compose-subject 'Fix cache invalidation' \
-  --compose-text 'Refresh the cache after a successful write so later readers see the new value.' \
-  --compose-detail 'The cache uses generation numbers to detect stale entries.' \
-  --compose-table-head 'Name,State,Count' \
-  --compose-table-row 'cache,updated,3' \
-  --compose-list=numbered \
-  --compose-list-item 'Refresh the cache' \
-  --compose-list-item 'Verify the new value' \
-  --compose-list-end \
-  --compose-list=bullets \
-  --compose-list-item 'Keep the update atomic' \
-  --compose-text 'Refresh the cache after writes [#1]' \
-  --compose-footer-1 'The generation counter now advances only after a successful write.' \
-  --compose-line 'Fixes: #123' \
+git-compose-commit --subject 'Fix cache invalidation' \
+  --text 'Refresh the cache after a successful write so later readers see the new value.' \
+  --detail 'The cache uses generation numbers to detect stale entries.' \
+  --th 'Name,State,Count' \
+  --tr 'cache,updated,3' \
+  --numlist \
+  --list-item 'Refresh the cache' \
+  --list-item 'Verify the new value' \
+  --bullets \
+  --list-item 'Keep the update atomic' \
+  --text 'The generation counter now advances after a successful write [#1]' \
+  --footer-1 'This prevents readers from observing a partially updated value.' \
+  --line 'Fixes: #123' \
   --all
 ```
 
-The subject is always the first line. `--compose-text` paragraphs are whitespace
-normalized and wrapped at 72 columns. `--compose-detail` content is preserved as
-literal text and indented by four spaces. `--compose-line` is emitted as one
-unwrapped line and rejects embedded newlines. Sections are separated by blank
-lines. Each section option can be repeated; `--compose-subject` must occur at most
-once. Values can be supplied as `--compose-subject=value` or as the next argument.
-Tables use comma-separated cells, such as `--compose-table-head=Name,State` and
-`--compose-table-row=cache,updated`. Each row must have the same number of cells as
-its header. A new table header starts a new table section, and rows are added
-to the most recent header. Tables have ASCII borders and columns sized to fit
-their contents. The short forms `--compose-th` and `--compose-tr` are also available.
-For several rows at once, `--compose-table-rows` separates rows with semicolons,
-for example `--compose-table-rows='cache,ready;worker,waiting'`.
+## Options
 
-Text and line sections can refer to numbered footers with `[#N]`, for example
-`--compose-text 'See the retry behavior [#1]' --compose-footer-1 'Retries use bounded
-exponential backoff.'`. References inside backtick-delimited code spans are
-ignored. Every reference must have a matching `--compose-footer-N`, and every
-footer must be referenced. Footers are appended after the other sections in
-number order, with their labels aligned and their text wrapped to fit.
+The short, unprefixed options are convenient for interactive use. Their
+namespaced `--compose-*` equivalents are available for scripts and to avoid
+possible conflicts with future `git commit` options.
 
-Lists use `--compose-list=numbered` or `--compose-list=bullets`, followed by one or more
-`--compose-list-item` options. A list item without an active list starts a
-numbered list automatically. Starting a list inside an open list nests it; use
-`--compose-list-end` to return to the parent. Lists also end automatically when
-another message section begins or the arguments end.
+| Short option | Namespaced option |
+| --- | --- |
+| `--subject` | `--compose-subject` |
+| `--text` | `--compose-text` |
+| `--detail` | `--compose-detail` |
+| `--line` | `--compose-line` |
+| `--th` | `--compose-th` or `--compose-table-head` |
+| `--tr` | `--compose-tr` or `--compose-table-row` |
+| `--table-rows` | `--compose-table-rows` |
+| `--footer-N` | `--compose-footer-N` |
+| `--list` | `--compose-list` |
+| `--list-item` | `--compose-list-item` |
+| `--list-end` | `--compose-list-end` |
+| `--numlist` | `--compose-numlist` |
+| `--bullets` | `--compose-bullets` |
 
-Use `--` to end compose-option parsing; everything after it, including
-pathspecs that look like compose options, is passed directly to Git.
+The longer unprefixed table aliases `--table-head` and `--table-row` are also
+accepted. Table shorthand works both ways: `--th`/`--tr` and
+`--compose-th`/`--compose-tr` are supported, as are
+`--compose-table-head`/`--compose-table-row`.
 
-Unprefixed aliases are also supported: `--subject`, `--text`, `--detail`,
-`--line`, `--table-head`, `--table-row`, `--table-rows`, `--th`, `--tr`,
-`--list`, `--list-item`, `--list-end`, and `--footer-N`. They may conflict
-with options added by a future Git version, so prefer the `--compose-*` forms
-for scripts and long-term use.
+Values can be written as `--text='paragraph text'` or as the next argument.
+The subject is always the first line. Text paragraphs are whitespace
+normalized and wrapped at 72 columns. Detail content is emitted literally
+with a four-space prefix on each line. Line content stays unwrapped and must
+not contain a newline. Message sections are separated by blank lines.
+
+Tables use commas between cells and semicolons between rows:
+
+```sh
+git-compose-commit --th 'Name,State' --table-rows='cache,ready;worker,waiting'
+```
+
+Cells are padded to fit and the table is drawn with ASCII borders. Each row
+must have the same number of cells as the header. Repeated `--tr` options add
+rows individually; `--table-rows` adds several at once.
+
+Lists default to numbered when started by `--list-item`. Use `--numlist` or
+`--list=numbered` for numbered lists and `--bullets` or `--list=bullets` for
+bullet lists. Starting another list inside one nests it; use `--list-end` to
+return to its parent. Lists close automatically when another message section
+begins or the arguments end.
+
+Text and line sections can reference numbered footers with `[#N]`. Each
+reference needs a matching `--footer-N`, and every footer must be referenced.
+References inside backtick-delimited code spans are ignored. Footers appear at
+the end in number order, with aligned labels and wrapped text.
+
+Use `--` to stop wrapper option parsing. The `--` and everything after it are
+passed directly to Git; Git treats arguments after its separator as pathspecs.
 
 ## Tests
 
-Run `cargo test`. Unit tests for the message formatting logic are in
-`src/tests/mod.rs`; end-to-end tests that invoke the executable and inspect
-commits in temporary Git repositories are in `tests/end_to_end.rs`. Golden
-fixtures in `tests/fixtures/` list one argument per line, then a blank line,
-then the exact expected commit message.
+Run `cargo test`. Unit tests for formatting logic are in `src/tests/mod.rs`.
+End-to-end tests in `tests/end_to_end.rs` invoke the executable in temporary
+Git repositories. Golden fixtures in `tests/fixtures/` contain one argument
+per line, a blank separator, and the exact expected commit message.

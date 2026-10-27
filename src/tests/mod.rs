@@ -80,6 +80,21 @@ fn default_list_is_numbered_and_nested_list_can_return_to_parent() {
 }
 
 #[test]
+fn numlist_and_bullets_aliases_select_list_styles() {
+    assert_eq!(
+        message(&[
+            "--numlist",
+            "--list-item=first",
+            "--bullets",
+            "--list-item=nested",
+            "--list-end",
+            "--compose-list-item=second",
+        ]),
+        "1. first\n  * nested\n2. second\n"
+    );
+}
+
+#[test]
 fn outputs_aligned_footers_and_ignores_backtick_references() {
     assert_eq!(
         message(&[

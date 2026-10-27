@@ -39,22 +39,22 @@ fn usage() -> &'static str {
     "Usage: git-compose-commit [wrapper options] [git commit options] [-- pathspec...]
 
 Message options:
-  --compose-subject TEXT   Set the subject (may appear once)
-  --compose-text TEXT      Add a wrapped prose paragraph (repeatable)
-  --compose-detail TEXT    Add literal text, indented by four spaces (repeatable)
-  --compose-line TEXT      Add one unwrapped line (repeatable)
-  --compose-table-head CSV Add a table header (comma-separated cells)
-  --compose-table-row CSV  Add a row to the latest table (repeatable)
-  --compose-table-rows CSV Add multiple rows (semicolon-separated)
-  --compose-th CSV         Short form of --compose-table-head
-  --compose-tr CSV         Short form of --compose-table-row
-  --compose-footer-N TEXT  Define footer N for a [#N] reference
-  --compose-list KIND      Start a numbered or bullets list (lists can nest)
-  --compose-list-item TEXT Add an item; defaults to a numbered list if needed
-  --compose-list-end       End the current explicit list
+  --subject TEXT       Set the subject (also --compose-subject; once only)
+  --text TEXT          Add a wrapped prose paragraph (repeatable)
+  --detail TEXT        Add literal text, indented by four spaces
+  --line TEXT          Add one unwrapped line
+  --th CSV             Table header (also --table-head, --compose-th, --compose-table-head)
+  --tr CSV             Add a table row (also --table-row, --compose-tr, --compose-table-row)
+  --table-rows CSV     Add semicolon-separated rows
+  --footer-N TEXT      Define footer N for a [#N] reference
+  --numlist            Start a numbered list (also --list=numbered)
+  --bullets            Start a bullet list (also --list=bullets)
+  --list KIND          Start a numbered or bullets list
+  --list-item TEXT     Add an item; defaults to a numbered list
+  --list-end           End the current explicit list
 
-Unprefixed aliases are also accepted, but may conflict with future git commit
-options; prefer the --compose-* forms.
+Namespaced equivalents use the --compose- prefix. Unprefixed options may
+conflict with future git commit options; use --compose-* in scripts.
 
 Other arguments are passed to git commit. Use -- to stop parsing wrapper options."
 }
@@ -217,6 +217,21 @@ fn parse_args(
         if arg == OsStr::new("--compose-list-end") || arg == OsStr::new("--list-end") {
             if list_stack.pop().is_none() {
                 return Err("--list-end has no open list".into());
+            }
+            active_table = None;
+            i += 1;
+            continue;
+        }
+        let list_shorthand = match arg.to_str() {
+            Some("--numlist" | "--compose-numlist") => Some(ListKind::Numbered),
+            Some("--bullets" | "--compose-bullets") => Some(ListKind::Bullets),
+            _ => None,
+        };
+        if let Some(kind) = list_shorthand {
+            list_stack.push(kind);
+            if active_list_section.is_none() {
+                sections.push(Section::List(Vec::new()));
+                active_list_section = Some(sections.len() - 1);
             }
             active_table = None;
             i += 1;

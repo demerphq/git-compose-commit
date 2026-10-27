@@ -1,8 +1,9 @@
 --compose-subject=Document update steps
 --compose-text=Review [#1] for more context.
 --compose-footer-1=The update is committed only after validation.
+--numlist
 --compose-list-item=Refresh the cache
---compose-list=bullets
+--bullets
 --compose-list-item=Verify the new value
 --compose-list-end
 --compose-list-item=Notify readers
