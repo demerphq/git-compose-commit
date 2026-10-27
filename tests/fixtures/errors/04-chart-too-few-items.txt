@@ -1,0 +1,4 @@
+--vbar-chart=only:3
+
+git-compose-commit: --vbar-chart requires at least two data items
+Try 'git-compose-commit --help' for details.

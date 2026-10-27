@@ -1,0 +1,19 @@
+--subject=Show process flow
+--hflow-chart=float=left;data=Parse,Validate,Commit
+--vflow-chart=float=left;data=Input,Output
+--allow-empty
+
+Show process flow
+
++----------+      +----------+      +----------+
+|  Parse   | --> | Validate | --> |  Commit  |
++----------+      +----------+      +----------+
+
++--------+
+| Input  |
++--------+
+     |
+     v
++--------+
+| Output |
++--------+

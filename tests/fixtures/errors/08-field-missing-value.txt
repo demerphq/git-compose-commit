@@ -1,0 +1,4 @@
+--field=Backend:
+
+git-compose-commit: --field requires a non-empty KEY and VALUE
+Try 'git-compose-commit --help' for details.

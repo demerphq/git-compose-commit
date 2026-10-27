@@ -34,6 +34,30 @@ You need Git and a Rust toolchain. Use `git-compose-commit -h` (or
 `--help=long`) for the detailed option guide. Use `--version` to print the
 installed version.
 
+## User defaults
+
+The optional `~/.compose-commit.toml` file sets defaults for wrapping,
+random choices, and bubble appearance. Use flat top-level TOML assignments;
+blank lines and `#` comments are allowed. Command-line settings take
+precedence. For example:
+
+```toml
+wrap_width = 68
+rand_seed = 123
+bubble_speaker = "cat"
+bubble_style = "thought"
+bubble_speaker_side = "below"
+bubble_side = "center"
+bubble_float = "center"
+```
+
+Every setting is optional. Without a configured bubble default or explicit
+bubble clause, that choice remains random. `rand_seed` seeds any random
+choices the tool makes; `--rand-seed` overrides it for one invocation.
+Supported bubble values are the same as the `speaker`, `style`,
+`speaker-side`, `bubble-side`, and `float` clauses accepted by `--bubble`.
+Unknown settings and invalid values in the config file are errors.
+
 ## Compose a message
 
 The subject is always the first line, wherever `--subject` appears in the
@@ -43,7 +67,11 @@ blank lines.
 | Option | Output |
 | --- | --- |
 | `--subject TEXT` | Subject line. May be specified once. |
-| `--text TEXT` | Prose paragraph. Whitespace is normalized and text wraps at 72 characters. |
+| `--text TEXT` | Prose paragraph. Whitespace is normalized and text wraps to the message margin. |
+| `--field KEY:VALUE` | Add an aligned key/value row. Adjacent fields form one block. |
+| `--note TEXT` | Add a wrapped paragraph labeled `Note:`. |
+| `--warning TEXT` | Add a wrapped paragraph labeled `Warning:`. |
+| `--wrap-width N` | Set the global message margin; defaults to 72 columns without a config setting (20–256). |
 | `--detail TEXT` | Unwrapped text block with four spaces added before each line. |
 | `--line TEXT` | One unwrapped line. Embedded newlines are rejected. |
 
@@ -55,8 +83,48 @@ the option or use `=`:
 --text='A paragraph of prose.'
 ```
 
-Words longer than the wrap margin are kept intact. Git may apply its normal
-commit-message cleanup after the wrapper supplies the message.
+Words longer than the wrap margin are kept intact. `--wrap-width` also sets
+the alignment margin for charts and bubbles, and the wrapping width for lists,
+fields, callouts, and footers. Literal `--detail` and `--line` content stays
+unwrapped. Git may apply its normal commit-message cleanup after the wrapper
+supplies the message.
+
+## Fields and callouts
+
+Use repeated `--field=KEY:VALUE` options for a compact aligned block. The
+value may contain colons; the first colon separates key from value. Keys and
+values must both be non-empty.
+
+```sh
+git-compose-commit \
+  --subject 'Document runtime settings' \
+  --field 'Backend:sqlite' \
+  --field 'Endpoint:https://example.test/api' \
+  --field 'Retries:3'
+```
+
+This renders as:
+
+```text
+Backend : sqlite
+Endpoint: https://example.test/api
+Retries:  3
+```
+
+Use `--note` or `--warning` for labeled prose. Their continuation lines align
+with the start of the text:
+
+```text
+Note:    Existing config files remain compatible.
+Warning: This migration removes the legacy index.
+```
+
+The global `--wrap-width` option changes the default 72-column margin for
+wrapped content and alignment:
+
+```sh
+git-compose-commit --wrap-width=60 --text 'Wrap this paragraph at 60 columns.'
+```
 
 ## Tables
 
@@ -95,6 +163,70 @@ quoting and escaping within a cell are not supported.
 `--table-head` and `--table-row` are also accepted. The namespaced short forms
 `--compose-th` and `--compose-tr`, and full forms `--compose-table-head` and
 `--compose-table-row`, work as well.
+
+## ASCII bar charts
+
+Use `--hbar-chart` or `--vbar-chart` to add a horizontal or vertical ASCII
+chart. Data items are comma-separated `label:value` pairs, and at least two
+items are required. Without chart settings, pass the data list directly:
+
+```sh
+--hbar-chart='tests:10,docs:5,review:3'
+```
+
+When setting chart options, clauses are separated by semicolons and the data
+list must use `data=`:
+
+```sh
+--vbar-chart='float=right;height=8;data=tests:10,docs:5,review:3'
+```
+
+`float` aligns the chart block within the message margin (72 columns by
+default; see `--wrap-width`) and defaults to `center`. Vertical charts accept
+`height` (default 6); horizontal charts
+accept `width` (default 24). The largest value scales to the selected size.
+Chart sizes range from 1 to 256. Values must be non-negative whole numbers.
+Labels may not contain commas or semicolons, which are delimiters in this
+syntax.
+
+## ASCII flow charts
+
+Use `--hflow-chart` or `--vflow-chart` to render a straight chain of labeled
+boxes. The syntax follows the bar charts: a bare comma-separated label list,
+or semicolon-separated settings with a required `data=` list.
+
+```sh
+--hflow-chart='float=center;data=Parse,Validate,Commit'
+--vflow-chart='Input,Transform,Output'
+```
+
+Flow charts default to centered alignment. Labels stay on one line and are
+sized to fit the widest box. At least two labels are required; branches and
+free positioning are not supported.
+
+## Speech and thought bubbles
+
+Use `--bubble` to draw a phrase with an ASCII speaker avatar. The phrase may
+contain spaces; separate clauses with semicolons:
+
+```sh
+--bubble='speaker=cat;phrase=Mooooo;float=center'
+--bubble='speaker=stick-figure;style=thought;phrase=Maybe'
+```
+
+Choose `speaker=cat`, `speaker=dog`, or `speaker=stick-figure`. The style
+may be `voice` (also `speech`) or `thought`. `speaker-side=left|right` puts the
+avatar beside the bubble; `below` places it underneath. For an avatar below,
+`bubble-side=left|center|right` positions the bubble relative to it. `float`
+aligns the entire composition within the message and accepts `left`, `center`,
+or `right`. Any omitted bubble settings are chosen randomly unless configured
+in `~/.compose-commit.toml`; specify settings when you want to choose their
+exact values. Phrases wrap to fit the message margin.
+
+Use `--rand-seed=N` to control all random choices made by the tool, including
+bubble defaults. The namespaced alias is `--compose-rand-seed=N`. The same seed
+and arguments produce the same output; without a seed, choices vary between
+runs.
 
 ## Lists
 
@@ -187,9 +319,19 @@ when you want to avoid that risk.
 | `--text` | `--compose-text` |
 | `--detail` | `--compose-detail` |
 | `--line` | `--compose-line` |
+| `--field` | `--compose-field` |
+| `--note` | `--compose-note` |
+| `--warning` | `--compose-warning` |
+| `--wrap-width` | `--compose-wrap-width` |
 | `--th`, `--table-head` | `--compose-th`, `--compose-table-head` |
 | `--tr`, `--table-row` | `--compose-tr`, `--compose-table-row` |
 | `--table-rows` | `--compose-table-rows` |
+| `--hbar-chart` | `--compose-hbar-chart` |
+| `--vbar-chart` | `--compose-vbar-chart` |
+| `--hflow-chart` | `--compose-hflow-chart` |
+| `--vflow-chart` | `--compose-vflow-chart` |
+| `--bubble` | `--compose-bubble` |
+| `--rand-seed` | `--compose-rand-seed` |
 | `--numlist` | `--compose-numlist` |
 | `--bullets` | `--compose-bullets` |
 | `--list` | `--compose-list` |

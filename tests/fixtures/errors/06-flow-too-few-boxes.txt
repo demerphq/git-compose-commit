@@ -1,0 +1,4 @@
+--hflow-chart=only
+
+git-compose-commit: --hflow-chart requires at least two boxes
+Try 'git-compose-commit --help' for details.

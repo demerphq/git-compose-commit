@@ -1,0 +1,4 @@
+--vbar-chart=float=right;height=8;test:10,reading:20
+
+git-compose-commit: --vbar-chart requires data= when chart settings are specified
+Try 'git-compose-commit --help' for details.

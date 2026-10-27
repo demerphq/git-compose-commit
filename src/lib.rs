@@ -8,18 +8,179 @@ use std::process::{Command, ExitCode};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 const WRAP_WIDTH: usize = 72;
+const MAX_CHART_SIZE: usize = 256;
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+static BUBBLE_RANDOM_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+const COMPOSE_VALUE_OPTIONS: &[&str] = &[
+    "--compose-subject",
+    "--compose-text",
+    "--compose-detail",
+    "--compose-line",
+    "--compose-field",
+    "--compose-note",
+    "--compose-warning",
+    "--compose-wrap-width",
+    "--compose-table-head",
+    "--compose-table-row",
+    "--compose-table-rows",
+    "--compose-hbar-chart",
+    "--compose-vbar-chart",
+    "--compose-hflow-chart",
+    "--compose-vflow-chart",
+    "--compose-bubble",
+    "--compose-th",
+    "--compose-tr",
+    "--compose-list",
+    "--compose-list-item",
+    "--subject",
+    "--text",
+    "--detail",
+    "--line",
+    "--field",
+    "--note",
+    "--warning",
+    "--wrap-width",
+    "--table-head",
+    "--table-row",
+    "--table-rows",
+    "--hbar-chart",
+    "--vbar-chart",
+    "--hflow-chart",
+    "--vflow-chart",
+    "--bubble",
+    "--th",
+    "--tr",
+    "--list",
+    "--list-item",
+];
+
+struct BubbleRng {
+    state: u64,
+}
+
+impl BubbleRng {
+    fn new(seed: Option<u64>) -> Self {
+        let seed = seed.unwrap_or_else(|| {
+            let clock = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|duration| duration.as_nanos() as u64)
+                .unwrap_or(0);
+            clock
+                ^ BUBBLE_RANDOM_COUNTER
+                    .fetch_add(1, Ordering::Relaxed)
+                    .wrapping_mul(0x9e37_79b9_7f4a_7c15)
+                ^ u64::from(std::process::id())
+        });
+        Self {
+            state: if seed == 0 {
+                0xa076_1d64_78bd_642f
+            } else {
+                seed
+            },
+        }
+    }
+
+    fn index(&mut self, upper: usize) -> usize {
+        self.state ^= self.state << 13;
+        self.state ^= self.state >> 7;
+        self.state ^= self.state << 17;
+        (self.state as usize) % upper
+    }
+}
 
 #[derive(Debug)]
 enum Section {
     Text(String),
     Detail(String),
     Line(String),
+    Fields(Vec<(String, String)>),
+    Note(String),
+    Warning(String),
     Table {
         head: Vec<String>,
         rows: Vec<Vec<String>>,
     },
+    BarChart(BarChart),
+    FlowChart(FlowChart),
+    Bubble(Bubble),
     List(Vec<ListEntry>),
+}
+
+#[derive(Debug)]
+struct BarChart {
+    orientation: ChartOrientation,
+    alignment: ChartAlignment,
+    size: usize,
+    entries: Vec<(String, u64)>,
+}
+
+#[derive(Debug)]
+struct FlowChart {
+    orientation: ChartOrientation,
+    alignment: ChartAlignment,
+    steps: Vec<String>,
+}
+
+#[derive(Debug)]
+struct Bubble {
+    speaker: BubbleSpeaker,
+    speaker_side: SpeakerSide,
+    bubble_side: BubbleSide,
+    style: BubbleStyle,
+    alignment: ChartAlignment,
+    phrase: String,
+}
+
+#[derive(Debug, Default)]
+struct ComposeConfig {
+    wrap_width: Option<usize>,
+    rand_seed: Option<u64>,
+    bubble_speaker: Option<BubbleSpeaker>,
+    bubble_style: Option<BubbleStyle>,
+    bubble_speaker_side: Option<SpeakerSide>,
+    bubble_side: Option<BubbleSide>,
+    bubble_float: Option<ChartAlignment>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BubbleSpeaker {
+    Cat,
+    Dog,
+    StickFigure,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BubbleStyle {
+    Speech,
+    Thought,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SpeakerSide {
+    Below,
+    Left,
+    Right,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BubbleSide {
+    Left,
+    Center,
+    Right,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ChartOrientation {
+    Horizontal,
+    Vertical,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ChartAlignment {
+    Left,
+    Center,
+    Right,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,7 +201,7 @@ fn synopsis() -> &'static str {
 
 Usage: git-compose-commit [COMPOSE OPTIONS] [GIT OPTIONS] [-- PATHSPEC...]
 
-Common options: --subject, --text, --line, --th, --tr, --list-item
+Common options: --subject, --text, --field, --note, --line, --th, --tr
 Other: --version
 Use --help for the full option guide."
 }
@@ -54,13 +215,23 @@ Compose options:
   -h, --help=short     Show a concise synopsis
   --help, --help=long  Show this detailed guide
   --version            Show the program version
+  --rand-seed N        Seed random formatting choices
   --subject TEXT       Set the subject; may be given once
-  --text TEXT          Add a paragraph, wrapped at 72 characters
+  --text TEXT          Add a paragraph, wrapped at the message margin
+  --field KEY:VALUE    Add an aligned key/value row
+  --note TEXT          Add a wrapped, labeled note
+  --warning TEXT       Add a wrapped, labeled warning
+  --wrap-width N       Set the message margin (default 72; range 20-256)
   --detail TEXT        Add an unwrapped block, indented by four spaces
   --line TEXT          Add one unwrapped line
   --th CELLS           Start a table with comma-separated headings
   --tr CELLS           Add one comma-separated row
   --table-rows ROWS    Add rows separated by semicolons
+  --hbar-chart DATA    Add an ASCII horizontal bar chart
+  --vbar-chart DATA    Add an ASCII vertical bar chart
+  --hflow-chart DATA   Add an ASCII horizontal flow chart
+  --vflow-chart DATA   Add an ASCII vertical flow chart
+  --bubble OPTIONS     Add an ASCII speech or thought bubble
   --footer-N TEXT      Define the footer referenced by [#N]
   --list-item TEXT     Add an item; starts a numbered list if needed
   --numlist            Start a numbered list (also --list=numbered)
@@ -72,6 +243,16 @@ Options may be written as --option=value or --option value. The subject is
 always first. Body sections appear in argument order, separated by blank
 lines. Footers are collected at the end in number order.
 
+--wrap-width sets the global wrapping and alignment margin. It defaults to 72
+columns and accepts values from 20 to 256.
+
+The optional ~/.compose-commit.toml file sets user defaults. Command-line
+options override configured defaults. See the README for supported settings.
+
+--field=KEY:VALUE adds an aligned key/value row. Adjacent fields form one
+block. Split at the first colon; keys and values must both be non-empty.
+--note and --warning add labeled prose blocks with wrapped continuation lines.
+
 Footer references are recognized in --text and --line. Every reference needs
 a footer, and every footer must be referenced. References inside backticks
 are ignored.
@@ -79,6 +260,25 @@ are ignored.
 Tables split cells on commas and rows on semicolons. CSV quoting and escaping
 are not supported. Starting a list inside an open list nests it; a new
 message section closes open lists automatically.
+
+Chart data items use label:value pairs separated by commas. With no chart
+settings, the data list may be given directly. When settings are present,
+include data=LABEL:VALUE,... as a clause. Clauses are separated by semicolons;
+supported settings are float=left|center|right, height=N for vertical charts,
+and width=N for horizontal charts. Charts are centered by default. Data needs
+at least two items.
+
+Flow chart items are comma-separated box labels, with the same optional
+float=left|center|right and data= clauses. Use --hflow-chart for a horizontal
+chain or --vflow-chart for a vertical chain. Flow charts need at least two
+boxes and do not wrap labels.
+
+Bubbles use speaker=cat|dog|stick-figure and phrase=TEXT, with optional
+style=speech|thought, speaker-side=left|right|below,
+bubble-side=left|center|right, and float=left|center|right. Any omitted
+settings use the configured default or are chosen randomly. --rand-seed
+controls all random choices made by this tool; the same arguments and seed
+produce the same output.
 
 Each compose option also accepts a --compose- prefix, including
 --compose-numlist and --compose-bullets. The short table options also accept
@@ -107,6 +307,151 @@ fn split_equals(arg: &OsStr, name: &str) -> Option<Option<String>> {
     }
 }
 
+fn config_path() -> Option<PathBuf> {
+    env::var_os("HOME")
+        .or_else(|| env::var_os("USERPROFILE"))
+        .map(|home| PathBuf::from(home).join(".compose-commit.toml"))
+}
+
+fn parse_config_string(value: &str, key: &str, path: &std::path::Path) -> Result<String, String> {
+    let value = value.trim();
+    if value.len() < 2 || !value.starts_with('"') || !value.ends_with('"') {
+        return Err(format!(
+            "{}: {key} must be a quoted TOML string",
+            path.display()
+        ));
+    }
+    let inner = &value[1..value.len() - 1];
+    let mut output = String::new();
+    let mut chars = inner.chars();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            let Some(escaped) = chars.next() else {
+                return Err(format!("{}: invalid escape in {key}", path.display()));
+            };
+            match escaped {
+                '"' => output.push('"'),
+                '\\' => output.push('\\'),
+                'n' => output.push('\n'),
+                't' => output.push('\t'),
+                _ => return Err(format!("{}: invalid escape in {key}", path.display())),
+            }
+        } else {
+            output.push(ch);
+        }
+    }
+    Ok(output)
+}
+
+fn load_config_from(path: &std::path::Path) -> Result<ComposeConfig, String> {
+    let contents = match fs::read_to_string(path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Ok(ComposeConfig::default())
+        }
+        Err(error) => return Err(format!("could not read {}: {error}", path.display())),
+    };
+    let mut config = ComposeConfig::default();
+    let mut seen = BTreeSet::new();
+    for (line_number, line) in contents.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            return Err(format!(
+                "{}:{}: expected key = value",
+                path.display(),
+                line_number + 1
+            ));
+        };
+        let key = key.trim();
+        if !seen.insert(key.to_owned()) {
+            return Err(format!(
+                "{}:{}: duplicate setting {key}",
+                path.display(),
+                line_number + 1
+            ));
+        }
+        let value = value
+            .split_once('#')
+            .map_or(value, |(before, _)| before)
+            .trim();
+        let invalid =
+            |reason: &str| format!("{}:{}: {key} {reason}", path.display(), line_number + 1);
+        match key {
+            "wrap_width" => {
+                let width = value
+                    .replace('_', "")
+                    .parse::<usize>()
+                    .map_err(|_| invalid("must be an integer from 20 to 256"))?;
+                if !(20..=256).contains(&width) {
+                    return Err(invalid("must be an integer from 20 to 256"));
+                }
+                config.wrap_width = Some(width);
+            }
+            "rand_seed" => {
+                config.rand_seed = Some(
+                    value
+                        .replace('_', "")
+                        .parse::<u64>()
+                        .map_err(|_| invalid("must be an unsigned integer"))?,
+                );
+            }
+            "bubble_speaker" => {
+                config.bubble_speaker =
+                    Some(match parse_config_string(value, key, path)?.as_str() {
+                        "cat" => BubbleSpeaker::Cat,
+                        "dog" => BubbleSpeaker::Dog,
+                        "stick-figure" => BubbleSpeaker::StickFigure,
+                        _ => return Err(invalid("must be cat, dog, or stick-figure")),
+                    });
+            }
+            "bubble_style" => {
+                config.bubble_style = Some(match parse_config_string(value, key, path)?.as_str() {
+                    "speech" | "voice" => BubbleStyle::Speech,
+                    "thought" => BubbleStyle::Thought,
+                    _ => return Err(invalid("must be speech or thought")),
+                });
+            }
+            "bubble_speaker_side" => {
+                config.bubble_speaker_side =
+                    Some(match parse_config_string(value, key, path)?.as_str() {
+                        "below" => SpeakerSide::Below,
+                        "left" => SpeakerSide::Left,
+                        "right" => SpeakerSide::Right,
+                        _ => return Err(invalid("must be below, left, or right")),
+                    });
+            }
+            "bubble_side" => {
+                config.bubble_side = Some(match parse_config_string(value, key, path)?.as_str() {
+                    "left" => BubbleSide::Left,
+                    "center" => BubbleSide::Center,
+                    "right" => BubbleSide::Right,
+                    _ => return Err(invalid("must be left, center, or right")),
+                });
+            }
+            "bubble_float" => {
+                config.bubble_float = Some(match parse_config_string(value, key, path)?.as_str() {
+                    "left" => ChartAlignment::Left,
+                    "center" => ChartAlignment::Center,
+                    "right" => ChartAlignment::Right,
+                    _ => return Err(invalid("must be left, center, or right")),
+                });
+            }
+            _ => return Err(invalid("is not a recognized setting")),
+        }
+    }
+    Ok(config)
+}
+
+fn load_user_config() -> Result<ComposeConfig, String> {
+    match config_path() {
+        Some(path) => load_config_from(&path),
+        None => Ok(ComposeConfig::default()),
+    }
+}
+
 fn git_option_takes_value(arg: &OsStr) -> bool {
     matches!(
         arg.to_str(),
@@ -129,20 +474,84 @@ fn git_option_takes_value(arg: &OsStr) -> bool {
     )
 }
 
+fn rand_seed_option(arg: &OsStr) -> Option<Option<String>> {
+    split_equals(arg, "--rand-seed").or_else(|| split_equals(arg, "--compose-rand-seed"))
+}
+
+fn is_dynamic_footer_option(arg: &OsStr) -> bool {
+    let Some(value) = arg.to_str() else {
+        return false;
+    };
+    let Some(suffix) = value
+        .strip_prefix("--compose-footer-")
+        .or_else(|| value.strip_prefix("--footer-"))
+    else {
+        return false;
+    };
+    !suffix.contains('=') && !suffix.is_empty() && suffix.chars().all(|ch| ch.is_ascii_digit())
+}
+
+fn extract_rand_seed(args: &[OsString]) -> Result<Option<u64>, String> {
+    let mut seed = None;
+    let mut saw_seed = false;
+    let mut i = 0;
+    while i < args.len() {
+        let arg = &args[i];
+        if arg == OsStr::new("--") {
+            break;
+        }
+        if let Some(inline) = rand_seed_option(arg) {
+            if saw_seed {
+                return Err("--rand-seed may only be specified once".into());
+            }
+            saw_seed = true;
+            let value = match inline {
+                Some(value) => value,
+                None => {
+                    i += 1;
+                    let Some(value) = args.get(i) else {
+                        return Err("--rand-seed requires a value".into());
+                    };
+                    as_text(value, "--rand-seed")?
+                }
+            };
+            seed = Some(
+                value
+                    .parse::<u64>()
+                    .map_err(|_| "--rand-seed must be an unsigned integer".to_owned())?,
+            );
+        } else if git_option_takes_value(arg)
+            || COMPOSE_VALUE_OPTIONS
+                .iter()
+                .any(|name| arg == OsStr::new(name))
+            || is_dynamic_footer_option(arg)
+        {
+            i += 1;
+        }
+        i += 1;
+    }
+    Ok(seed)
+}
+
 fn parse_args(
     args: Vec<OsString>,
+    config: &ComposeConfig,
 ) -> Result<
     (
         Option<String>,
         Vec<Section>,
         BTreeMap<usize, String>,
+        usize,
         Vec<OsString>,
     ),
     String,
 > {
+    let mut bubble_rng = BubbleRng::new(extract_rand_seed(&args)?.or(config.rand_seed));
     let mut subject = None;
     let mut sections = Vec::new();
     let mut footers = BTreeMap::new();
+    let mut wrap_width = config.wrap_width.unwrap_or(WRAP_WIDTH);
+    let mut saw_wrap_width = false;
     let mut git_args = Vec::new();
     let mut active_table = None;
     let mut list_stack: Vec<ListKind> = Vec::new();
@@ -176,32 +585,17 @@ fn parse_args(
             std::process::exit(0);
         }
 
-        let recognized = [
-            "--compose-subject",
-            "--compose-text",
-            "--compose-detail",
-            "--compose-line",
-            "--compose-table-head",
-            "--compose-table-row",
-            "--compose-table-rows",
-            "--compose-th",
-            "--compose-tr",
-            "--compose-list",
-            "--compose-list-item",
-            "--subject",
-            "--text",
-            "--detail",
-            "--line",
-            "--table-head",
-            "--table-row",
-            "--table-rows",
-            "--th",
-            "--tr",
-            "--list",
-            "--list-item",
-        ]
-        .iter()
-        .find_map(|name| split_equals(arg, name).map(|inline| (*name, inline)));
+        if let Some(inline) = rand_seed_option(arg) {
+            if inline.is_none() {
+                i += 1;
+            }
+            i += 1;
+            continue;
+        }
+
+        let recognized = COMPOSE_VALUE_OPTIONS
+            .iter()
+            .find_map(|name| split_equals(arg, name).map(|inline| (*name, inline)));
         let dynamic_footer = arg.to_str().and_then(|value| {
             let (suffix, option_prefix) = value
                 .strip_prefix("--compose-footer-")
@@ -285,14 +679,36 @@ fn parse_args(
             if value.is_empty() {
                 return Err(format!("{name} value cannot be empty"));
             }
+            if matches!(name, "--wrap-width" | "--compose-wrap-width") {
+                if saw_wrap_width {
+                    return Err("--wrap-width may only be specified once".into());
+                }
+                saw_wrap_width = true;
+                wrap_width = value
+                    .parse::<usize>()
+                    .map_err(|_| "--wrap-width must be an integer from 20 to 256".to_owned())?;
+                if !(20..=256).contains(&wrap_width) {
+                    return Err("--wrap-width must be an integer from 20 to 256".into());
+                }
+                i += 1;
+                continue;
+            }
             let canonical = match name {
                 "--subject" => "--compose-subject",
                 "--text" => "--compose-text",
                 "--detail" => "--compose-detail",
                 "--line" => "--compose-line",
+                "--field" => "--compose-field",
+                "--note" => "--compose-note",
+                "--warning" => "--compose-warning",
                 "--table-head" | "--th" | "--compose-th" => "--compose-table-head",
                 "--table-row" | "--tr" | "--compose-tr" => "--compose-table-row",
                 "--table-rows" => "--compose-table-rows",
+                "--hbar-chart" => "--compose-hbar-chart",
+                "--vbar-chart" => "--compose-vbar-chart",
+                "--hflow-chart" => "--compose-hflow-chart",
+                "--vflow-chart" => "--compose-vflow-chart",
+                "--bubble" => "--compose-bubble",
                 "--list" => "--compose-list",
                 "--list-item" => "--compose-list-item",
                 _ => name,
@@ -311,6 +727,26 @@ fn parse_args(
                     }
                     sections.push(Section::Line(value));
                 }
+                "--compose-field" => {
+                    let Some((key, value)) = value.split_once(':') else {
+                        return Err("--field requires KEY:VALUE".into());
+                    };
+                    let key = key.trim();
+                    let value = value.trim();
+                    if key.is_empty() || value.is_empty() {
+                        return Err("--field requires a non-empty KEY and VALUE".into());
+                    }
+                    match sections.last_mut() {
+                        Some(Section::Fields(fields)) => {
+                            fields.push((key.to_owned(), value.to_owned()));
+                        }
+                        _ => {
+                            sections.push(Section::Fields(vec![(key.to_owned(), value.to_owned())]))
+                        }
+                    }
+                }
+                "--compose-note" => sections.push(Section::Note(value)),
+                "--compose-warning" => sections.push(Section::Warning(value)),
                 "--compose-table-head" | "--compose-th" => {
                     let head = parse_table_cells(&value);
                     if head.is_empty() {
@@ -367,6 +803,30 @@ fn parse_args(
                     }
                     active_list_section = None;
                     list_stack.clear();
+                }
+                "--compose-hbar-chart" | "--compose-vbar-chart" => {
+                    let orientation = if canonical == "--compose-hbar-chart" {
+                        ChartOrientation::Horizontal
+                    } else {
+                        ChartOrientation::Vertical
+                    };
+                    let chart = parse_bar_chart(&value, orientation)?;
+                    sections.push(Section::BarChart(chart));
+                }
+                "--compose-hflow-chart" | "--compose-vflow-chart" => {
+                    let orientation = if canonical == "--compose-hflow-chart" {
+                        ChartOrientation::Horizontal
+                    } else {
+                        ChartOrientation::Vertical
+                    };
+                    sections.push(Section::FlowChart(parse_flow_chart(&value, orientation)?));
+                }
+                "--compose-bubble" => {
+                    sections.push(Section::Bubble(parse_bubble(
+                        &value,
+                        &mut bubble_rng,
+                        config,
+                    )?));
                 }
                 "--compose-list" => {
                     let kind = match value.as_str() {
@@ -430,9 +890,10 @@ fn parse_args(
             i += 1;
         }
     }
-    Ok((subject, sections, footers, git_args))
+    Ok((subject, sections, footers, wrap_width, git_args))
 }
 
+#[cfg(test)]
 fn wrap_paragraph(text: &str) -> String {
     wrap_paragraph_at(text, WRAP_WIDTH)
 }
@@ -495,7 +956,659 @@ fn format_table(head: &[String], rows: &[Vec<String>]) -> String {
     lines.join("\n")
 }
 
-fn format_list(items: &[ListEntry]) -> String {
+fn parse_bar_chart(value: &str, orientation: ChartOrientation) -> Result<BarChart, String> {
+    let option_name = match orientation {
+        ChartOrientation::Horizontal => "--hbar-chart",
+        ChartOrientation::Vertical => "--vbar-chart",
+    };
+    let clauses = value.split(';').collect::<Vec<_>>();
+    let has_settings = clauses.iter().any(|clause| clause.contains('='));
+    let mut alignment = ChartAlignment::Center;
+    let mut size = match orientation {
+        ChartOrientation::Horizontal => 24,
+        ChartOrientation::Vertical => 6,
+    };
+    let mut data = None;
+
+    if has_settings {
+        for clause in clauses {
+            let Some((key, setting)) = clause.split_once('=') else {
+                return Err(format!(
+                    "{option_name} requires data= when chart settings are specified"
+                ));
+            };
+            match key {
+                "float" => {
+                    alignment = match setting {
+                        "left" => ChartAlignment::Left,
+                        "center" => ChartAlignment::Center,
+                        "right" => ChartAlignment::Right,
+                        _ => {
+                            return Err(format!(
+                                "{option_name} float must be 'left', 'center', or 'right'"
+                            ))
+                        }
+                    };
+                }
+                "height" if orientation == ChartOrientation::Vertical => {
+                    size = parse_chart_size(setting, option_name, "height")?;
+                }
+                "width" if orientation == ChartOrientation::Horizontal => {
+                    size = parse_chart_size(setting, option_name, "width")?;
+                }
+                "data" => data = Some(setting),
+                "height" | "width" => {
+                    let expected = match orientation {
+                        ChartOrientation::Horizontal => "width",
+                        ChartOrientation::Vertical => "height",
+                    };
+                    return Err(format!("{option_name} uses {expected}= for its bar scale"));
+                }
+                _ => return Err(format!("{option_name} has unknown setting '{key}'")),
+            }
+        }
+        let Some(data) = data else {
+            return Err(format!(
+                "{option_name} requires data= when chart settings are specified"
+            ));
+        };
+        parse_chart_data(data, option_name, alignment, orientation, size)
+    } else {
+        parse_chart_data(value, option_name, alignment, orientation, size)
+    }
+}
+
+fn parse_chart_size(value: &str, option: &str, setting: &str) -> Result<usize, String> {
+    let size = value
+        .parse::<usize>()
+        .map_err(|_| format!("{option} {setting} must be a positive whole number"))?;
+    if size == 0 {
+        return Err(format!(
+            "{option} {setting} must be a positive whole number"
+        ));
+    }
+    if size > MAX_CHART_SIZE {
+        return Err(format!("{option} {setting} cannot exceed {MAX_CHART_SIZE}"));
+    }
+    Ok(size)
+}
+
+fn parse_chart_data(
+    value: &str,
+    option: &str,
+    alignment: ChartAlignment,
+    orientation: ChartOrientation,
+    size: usize,
+) -> Result<BarChart, String> {
+    let mut entries = Vec::new();
+    for item in value.split(',') {
+        let Some((label, number)) = item.split_once(':') else {
+            return Err(format!("{option} data items must use label:value"));
+        };
+        let label = label.trim();
+        if label.is_empty() {
+            return Err(format!("{option} data labels cannot be empty"));
+        }
+        let value = number
+            .trim()
+            .parse::<u64>()
+            .map_err(|_| format!("{option} data values must be non-negative whole numbers"))?;
+        entries.push((label.to_owned(), value));
+    }
+    if entries.len() < 2 {
+        return Err(format!("{option} requires at least two data items"));
+    }
+    Ok(BarChart {
+        orientation,
+        alignment,
+        size,
+        entries,
+    })
+}
+
+fn parse_flow_chart(value: &str, orientation: ChartOrientation) -> Result<FlowChart, String> {
+    let option_name = match orientation {
+        ChartOrientation::Horizontal => "--hflow-chart",
+        ChartOrientation::Vertical => "--vflow-chart",
+    };
+    let clauses = value.split(';').collect::<Vec<_>>();
+    let has_settings = clauses.iter().any(|clause| clause.contains('='));
+    let mut alignment = ChartAlignment::Center;
+    let data = if has_settings {
+        let mut data = None;
+        for clause in clauses {
+            let Some((key, setting)) = clause.split_once('=') else {
+                return Err(format!(
+                    "{option_name} requires data= when chart settings are specified"
+                ));
+            };
+            match key {
+                "float" => {
+                    alignment = match setting {
+                        "left" => ChartAlignment::Left,
+                        "center" => ChartAlignment::Center,
+                        "right" => ChartAlignment::Right,
+                        _ => {
+                            return Err(format!(
+                                "{option_name} float must be 'left', 'center', or 'right'"
+                            ))
+                        }
+                    };
+                }
+                "data" => data = Some(setting),
+                _ => return Err(format!("{option_name} has unknown setting '{key}'")),
+            }
+        }
+        let Some(data) = data else {
+            return Err(format!(
+                "{option_name} requires data= when chart settings are specified"
+            ));
+        };
+        data
+    } else {
+        value
+    };
+    let steps = data
+        .split(',')
+        .map(str::trim)
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    if steps.iter().any(String::is_empty) {
+        return Err(format!("{option_name} box labels cannot be empty"));
+    }
+    if steps.len() < 2 {
+        return Err(format!("{option_name} requires at least two boxes"));
+    }
+    Ok(FlowChart {
+        orientation,
+        alignment,
+        steps,
+    })
+}
+
+fn parse_bubble(
+    value: &str,
+    rng: &mut BubbleRng,
+    config: &ComposeConfig,
+) -> Result<Bubble, String> {
+    let mut speaker = None;
+    let mut style = None;
+    let mut speaker_side = None;
+    let mut bubble_side = None;
+    let mut alignment = None;
+    let mut phrase = None;
+    let mut seen = BTreeSet::new();
+
+    for clause in value.split(';') {
+        let Some((key, setting)) = clause.split_once('=') else {
+            return Err("--bubble clauses must use name=value".into());
+        };
+        if !seen.insert(key) {
+            return Err(format!("--bubble {key} may only be specified once"));
+        }
+        match key {
+            "speaker" => {
+                speaker = Some(match setting {
+                    "cat" => BubbleSpeaker::Cat,
+                    "dog" => BubbleSpeaker::Dog,
+                    "stick-figure" => BubbleSpeaker::StickFigure,
+                    _ => {
+                        return Err(
+                            "--bubble speaker must be 'cat', 'dog', or 'stick-figure'".into()
+                        )
+                    }
+                });
+            }
+            "style" => {
+                style = Some(match setting {
+                    "speech" | "voice" => BubbleStyle::Speech,
+                    "thought" => BubbleStyle::Thought,
+                    _ => {
+                        return Err("--bubble style must be 'voice', 'speech', or 'thought'".into())
+                    }
+                });
+            }
+            "speaker-side" => {
+                speaker_side = Some(match setting {
+                    "below" => SpeakerSide::Below,
+                    "left" => SpeakerSide::Left,
+                    "right" => SpeakerSide::Right,
+                    _ => {
+                        return Err(
+                            "--bubble speaker-side must be 'left', 'right', or 'below'".into()
+                        )
+                    }
+                });
+            }
+            "bubble-side" => {
+                bubble_side = Some(match setting {
+                    "left" => BubbleSide::Left,
+                    "center" => BubbleSide::Center,
+                    "right" => BubbleSide::Right,
+                    _ => {
+                        return Err(
+                            "--bubble bubble-side must be 'left', 'center', or 'right'".into()
+                        )
+                    }
+                });
+            }
+            "float" => {
+                alignment = Some(match setting {
+                    "left" => ChartAlignment::Left,
+                    "center" => ChartAlignment::Center,
+                    "right" => ChartAlignment::Right,
+                    _ => return Err("--bubble float must be 'left', 'center', or 'right'".into()),
+                });
+            }
+            "phrase" => phrase = Some(setting),
+            _ => return Err(format!("--bubble has unknown option '{key}'")),
+        }
+    }
+
+    let phrase = phrase.ok_or_else(|| "--bubble requires phrase=...".to_owned())?;
+    if phrase.trim().is_empty() {
+        return Err("--bubble phrase cannot be empty".into());
+    }
+    Ok(Bubble {
+        speaker: speaker
+            .or(config.bubble_speaker)
+            .unwrap_or_else(|| random_bubble_speaker(rng)),
+        speaker_side: speaker_side
+            .or(config.bubble_speaker_side)
+            .unwrap_or_else(|| random_speaker_side(rng)),
+        bubble_side: bubble_side
+            .or(config.bubble_side)
+            .unwrap_or_else(|| random_bubble_side(rng)),
+        style: style
+            .or(config.bubble_style)
+            .unwrap_or_else(|| random_bubble_style(rng)),
+        alignment: alignment
+            .or(config.bubble_float)
+            .unwrap_or_else(|| random_chart_alignment(rng)),
+        phrase: phrase.to_owned(),
+    })
+}
+
+fn random_bubble_speaker(rng: &mut BubbleRng) -> BubbleSpeaker {
+    match rng.index(3) {
+        0 => BubbleSpeaker::Cat,
+        1 => BubbleSpeaker::Dog,
+        _ => BubbleSpeaker::StickFigure,
+    }
+}
+
+fn random_speaker_side(rng: &mut BubbleRng) -> SpeakerSide {
+    match rng.index(3) {
+        0 => SpeakerSide::Below,
+        1 => SpeakerSide::Left,
+        _ => SpeakerSide::Right,
+    }
+}
+
+fn random_bubble_side(rng: &mut BubbleRng) -> BubbleSide {
+    match rng.index(3) {
+        0 => BubbleSide::Left,
+        1 => BubbleSide::Center,
+        _ => BubbleSide::Right,
+    }
+}
+
+fn random_bubble_style(rng: &mut BubbleRng) -> BubbleStyle {
+    if rng.index(2) == 0 {
+        BubbleStyle::Speech
+    } else {
+        BubbleStyle::Thought
+    }
+}
+
+fn random_chart_alignment(rng: &mut BubbleRng) -> ChartAlignment {
+    match rng.index(3) {
+        0 => ChartAlignment::Left,
+        1 => ChartAlignment::Center,
+        _ => ChartAlignment::Right,
+    }
+}
+
+fn format_bar_chart(chart: &BarChart, wrap_width: usize) -> String {
+    let rendered = match chart.orientation {
+        ChartOrientation::Horizontal => format_horizontal_chart(chart),
+        ChartOrientation::Vertical => format_vertical_chart(chart),
+    };
+    align_block(&rendered, chart.alignment, wrap_width)
+}
+
+fn format_flow_chart(chart: &FlowChart, wrap_width: usize) -> String {
+    let box_width = chart
+        .steps
+        .iter()
+        .map(|step| step.chars().count())
+        .max()
+        .unwrap_or(0);
+    let border = format!("+{}+", "-".repeat(box_width + 2));
+    let render_box = |step: &str| {
+        (
+            border.clone(),
+            format!("| {step:^box_width$} |"),
+            border.clone(),
+        )
+    };
+    let rendered = match chart.orientation {
+        ChartOrientation::Horizontal => {
+            let boxes = chart.steps.iter().map(|step| render_box(step));
+            let boxes = boxes.collect::<Vec<_>>();
+            vec![
+                boxes
+                    .iter()
+                    .map(|(top, _, _)| top.as_str())
+                    .collect::<Vec<_>>()
+                    .join("      "),
+                boxes
+                    .iter()
+                    .map(|(_, middle, _)| middle.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" --> "),
+                boxes
+                    .iter()
+                    .map(|(_, _, bottom)| bottom.as_str())
+                    .collect::<Vec<_>>()
+                    .join("      "),
+            ]
+            .join("\n")
+        }
+        ChartOrientation::Vertical => {
+            let mut lines = Vec::new();
+            for (index, step) in chart.steps.iter().enumerate() {
+                let (top, middle, bottom) = render_box(step);
+                lines.extend([top, middle, bottom]);
+                if index + 1 < chart.steps.len() {
+                    let connector_indent = " ".repeat(box_width / 2 + 2);
+                    lines.push(format!("{connector_indent}|"));
+                    lines.push(format!("{connector_indent}v"));
+                }
+            }
+            lines.join("\n")
+        }
+    };
+    align_block(&rendered, chart.alignment, wrap_width)
+}
+
+fn format_bubble(bubble: &Bubble, wrap_width: usize) -> String {
+    let phrase_lines = wrap_paragraph_at(&bubble.phrase, wrap_width.saturating_sub(18));
+    let phrase_lines = phrase_lines.lines().collect::<Vec<_>>();
+    let phrase_width = phrase_lines
+        .iter()
+        .map(|line| line.chars().count())
+        .max()
+        .unwrap_or(1)
+        .max(1);
+    let lines = match bubble.style {
+        BubbleStyle::Speech => {
+            let border = "-".repeat(phrase_width + 1);
+            let mut lines = vec![format!(" .{border}.")];
+            lines.extend(
+                phrase_lines
+                    .iter()
+                    .map(|line| format!("( {line:<phrase_width$} )")),
+            );
+            lines.push(format!(" '{border}'"));
+            lines
+        }
+        BubbleStyle::Thought => phrase_lines
+            .iter()
+            .map(|line| format!("( {line:<phrase_width$} )"))
+            .collect(),
+    };
+    let bubble_width = phrase_width + 4;
+    let avatar = bubble_avatar(bubble.speaker);
+    let rendered = match bubble.speaker_side {
+        SpeakerSide::Below => {
+            let avatar_width = avatar
+                .iter()
+                .map(|line| line.chars().count())
+                .max()
+                .unwrap_or(0);
+            let offset = if bubble.bubble_side == BubbleSide::Center {
+                0
+            } else {
+                4
+            };
+            let canvas_width = bubble_width.max(avatar_width) + offset;
+            let (bubble_x, avatar_x) = match bubble.bubble_side {
+                BubbleSide::Center => (
+                    (canvas_width - bubble_width) / 2,
+                    (canvas_width - avatar_width) / 2,
+                ),
+                BubbleSide::Left => (0, 4),
+                BubbleSide::Right => (4, 0),
+            };
+            let mut output = lines
+                .iter()
+                .map(|line| format!("{}{line}", " ".repeat(bubble_x)))
+                .collect::<Vec<_>>();
+            let bubble_center = bubble_x + bubble_width / 2;
+            let speaker_center = avatar_x + avatar_width / 2;
+            let direction = if speaker_center > bubble_center {
+                1isize
+            } else if speaker_center < bubble_center {
+                -1isize
+            } else {
+                0isize
+            };
+            match bubble.style {
+                BubbleStyle::Speech => {
+                    for step in 1..=2 {
+                        let x = (bubble_center as isize + direction * step).max(0) as usize;
+                        output.push(place_bubble_mark(
+                            canvas_width,
+                            x,
+                            if direction < 0 { '/' } else { '\\' },
+                        ));
+                    }
+                }
+                BubbleStyle::Thought => {
+                    for (step, mark) in ['O', 'o', '.'].into_iter().enumerate() {
+                        let x = (bubble_center as isize + direction * (step as isize + 1)).max(0)
+                            as usize;
+                        output.push(place_bubble_mark(canvas_width, x, mark));
+                    }
+                }
+            }
+            output.extend(
+                avatar
+                    .iter()
+                    .map(|line| format!("{}{line}", " ".repeat(avatar_x))),
+            );
+            output.join("\n")
+        }
+        SpeakerSide::Left | SpeakerSide::Right => {
+            let avatar_width = avatar
+                .iter()
+                .map(|line| line.chars().count())
+                .max()
+                .unwrap_or(0);
+            let height = lines.len().max(avatar.len());
+            let bubble_top_padding = (height - lines.len()) / 2;
+            let top_padding = (height - avatar.len()) / 2;
+            let bubble_row = bubble_top_padding + lines.len() / 2;
+            let connector = match (bubble.style, bubble.speaker_side) {
+                (BubbleStyle::Speech, SpeakerSide::Left) => " <-- ",
+                (BubbleStyle::Speech, SpeakerSide::Right) => " --> ",
+                (BubbleStyle::Speech, SpeakerSide::Below) => unreachable!(),
+                (BubbleStyle::Thought, SpeakerSide::Left) => " . o O ",
+                (BubbleStyle::Thought, SpeakerSide::Right) => " O o . ",
+                (BubbleStyle::Thought, SpeakerSide::Below) => unreachable!(),
+            };
+            (0..height)
+                .map(|row| {
+                    let bubble_line = row
+                        .checked_sub(bubble_top_padding)
+                        .and_then(|index| lines.get(index))
+                        .map(String::as_str)
+                        .unwrap_or("");
+                    let avatar_line = row
+                        .checked_sub(top_padding)
+                        .and_then(|index| avatar.get(index))
+                        .copied()
+                        .unwrap_or("");
+                    let spacer = if row == bubble_row {
+                        connector
+                    } else {
+                        "     "
+                    };
+                    match bubble.speaker_side {
+                        SpeakerSide::Left => format!(
+                            "{avatar_line:<avatar_width$}{spacer}{bubble_line}",
+                            avatar_width = avatar_width
+                        ),
+                        SpeakerSide::Right => format!(
+                            "{bubble_line}{spacer}{avatar_line:<avatar_width$}",
+                            avatar_width = avatar_width
+                        ),
+                        SpeakerSide::Below => unreachable!(),
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        }
+    };
+    align_block(&rendered, bubble.alignment, wrap_width)
+}
+
+fn place_bubble_mark(width: usize, position: usize, mark: char) -> String {
+    let mut line = vec![' '; width.max(position + 1)];
+    line[position] = mark;
+    line.into_iter().collect()
+}
+
+fn bubble_avatar(speaker: BubbleSpeaker) -> &'static [&'static str] {
+    match speaker {
+        BubbleSpeaker::Cat => &[" /\\_/\\", "( o.o )", " > ^ <"],
+        BubbleSpeaker::Dog => &[
+            " / \\__",
+            "(    @\\___",
+            " /         O",
+            "/   (_____/",
+            "/_____/   U",
+        ],
+        BubbleSpeaker::StickFigure => &["  O", " /|\\", " / \\"],
+    }
+}
+
+fn align_block(block: &str, alignment: ChartAlignment, wrap_width: usize) -> String {
+    let width = block
+        .lines()
+        .map(|line| line.chars().count())
+        .max()
+        .unwrap_or(0);
+    let padding = match alignment {
+        ChartAlignment::Left => 0,
+        ChartAlignment::Center => wrap_width.saturating_sub(width) / 2,
+        ChartAlignment::Right => wrap_width.saturating_sub(width),
+    };
+    let prefix = " ".repeat(padding);
+    block
+        .lines()
+        .map(|line| format!("{prefix}{}", line.trim_end()))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn format_horizontal_chart(chart: &BarChart) -> String {
+    let label_width = chart
+        .entries
+        .iter()
+        .map(|(label, _)| label.chars().count())
+        .max()
+        .unwrap_or(0);
+    let max_value = chart
+        .entries
+        .iter()
+        .map(|(_, value)| *value)
+        .max()
+        .unwrap_or(0);
+    chart
+        .entries
+        .iter()
+        .map(|(label, value)| {
+            let bar_length = if max_value == 0 || *value == 0 {
+                0
+            } else {
+                (((*value as u128 * chart.size as u128) / max_value as u128) as usize).max(1)
+            };
+            format!(
+                "{label:<label_width$} | {} {value}",
+                "#".repeat(bar_length),
+                label_width = label_width
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn format_vertical_chart(chart: &BarChart) -> String {
+    let max_value = chart
+        .entries
+        .iter()
+        .map(|(_, value)| *value)
+        .max()
+        .unwrap_or(0);
+    let axis_width = max_value.to_string().chars().count().max(1);
+    let cell_width = chart
+        .entries
+        .iter()
+        .map(|(label, _)| label.chars().count())
+        .max()
+        .unwrap_or(1)
+        .max(1);
+    let bar_row = |level: usize| {
+        let bars = chart
+            .entries
+            .iter()
+            .map(|(_, value)| {
+                let bar_height = if max_value == 0 {
+                    0
+                } else {
+                    ((*value as u128 * chart.size as u128 + max_value as u128 / 2)
+                        / max_value as u128) as usize
+                };
+                let bar_height = if *value > 0 {
+                    bar_height.max(1).min(chart.size)
+                } else {
+                    0
+                };
+                let center = cell_width / 2;
+                let mut column = vec![' '; cell_width];
+                if level <= bar_height {
+                    column[center] = '#';
+                }
+                column.into_iter().collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        bars
+    };
+    let mut lines = Vec::new();
+    for level in (1..=chart.size).rev() {
+        let axis = if level == chart.size {
+            format!("{:>axis_width$} | ", max_value)
+        } else {
+            format!("{:>axis_width$} | ", "")
+        };
+        lines.push(format!("{axis}{}", bar_row(level)));
+    }
+    let baseline = "-".repeat(chart.entries.len() * (cell_width + 1) - 1);
+    lines.push(format!("{:>axis_width$} +-{baseline}", "0"));
+    let labels = chart
+        .entries
+        .iter()
+        .map(|(label, _)| format!("{label:^cell_width$}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    lines.push(format!("{}   {labels}", " ".repeat(axis_width)));
+    lines.join("\n")
+}
+
+fn format_list(items: &[ListEntry], wrap_width: usize) -> String {
     let mut counters = Vec::<usize>::new();
     let mut kinds = Vec::<Option<ListKind>>::new();
     let mut lines = Vec::new();
@@ -520,7 +1633,7 @@ fn format_list(items: &[ListEntry]) -> String {
         let continuation = " ".repeat(first_prefix.chars().count());
         let wrapped = wrap_paragraph_at(
             &item.text,
-            WRAP_WIDTH.saturating_sub(first_prefix.chars().count()),
+            wrap_width.saturating_sub(first_prefix.chars().count()),
         );
         let mut wrapped_lines = wrapped.lines();
         lines.push(format!(
@@ -569,10 +1682,40 @@ fn find_footer_references(text: &str) -> BTreeSet<usize> {
     references
 }
 
+fn format_fields(fields: &[(String, String)], wrap_width: usize) -> String {
+    let key_width = fields
+        .iter()
+        .map(|(key, _)| key.chars().count())
+        .max()
+        .unwrap_or(0);
+    let mut lines = Vec::new();
+    for (key, value) in fields {
+        let prefix = format!("{key:<key_width$}: ");
+        let continuation = " ".repeat(key_width + 2);
+        let wrapped = wrap_paragraph_at(value, wrap_width.saturating_sub(key_width + 2));
+        let mut wrapped_lines = wrapped.lines();
+        lines.push(format!("{prefix}{}", wrapped_lines.next().unwrap_or("")));
+        lines.extend(wrapped_lines.map(|line| format!("{continuation}{line}")));
+    }
+    lines.join("\n")
+}
+
+fn format_callout(label: &str, text: &str, wrap_width: usize) -> String {
+    let prefix = format!("{label}: ");
+    let continuation = " ".repeat(prefix.chars().count());
+    let wrapped = wrap_paragraph_at(text, wrap_width.saturating_sub(prefix.chars().count()));
+    let mut lines = wrapped.lines();
+    std::iter::once(format!("{prefix}{}", lines.next().unwrap_or("")))
+        .chain(lines.map(|line| format!("{continuation}{line}")))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn format_message(
     subject: Option<String>,
     sections: Vec<Section>,
     footers: BTreeMap<usize, String>,
+    wrap_width: usize,
 ) -> Result<String, String> {
     let mut parts = Vec::new();
     if let Some(subject) = subject {
@@ -583,7 +1726,7 @@ fn format_message(
         let formatted = match section {
             Section::Text(text) => {
                 references.extend(find_footer_references(&text));
-                wrap_paragraph(&text)
+                wrap_paragraph_at(&text, wrap_width)
             }
             Section::Detail(text) => text
                 .split('\n')
@@ -594,8 +1737,14 @@ fn format_message(
                 references.extend(find_footer_references(&line));
                 line
             }
+            Section::Fields(fields) => format_fields(&fields, wrap_width),
+            Section::Note(text) => format_callout("Note", &text, wrap_width),
+            Section::Warning(text) => format_callout("Warning", &text, wrap_width),
             Section::Table { head, rows } => format_table(&head, &rows),
-            Section::List(items) => format_list(&items),
+            Section::BarChart(chart) => format_bar_chart(&chart, wrap_width),
+            Section::FlowChart(chart) => format_flow_chart(&chart, wrap_width),
+            Section::Bubble(bubble) => format_bubble(&bubble, wrap_width),
+            Section::List(items) => format_list(&items, wrap_width),
         };
         parts.push(formatted);
     }
@@ -618,7 +1767,7 @@ fn format_message(
         let label_width = number_width + 3;
         let lines = footers.iter().map(|(number, text)| {
             let label = format!("[#{number}]");
-            let wrapped = wrap_paragraph_at(text, WRAP_WIDTH.saturating_sub(label_width + 1));
+            let wrapped = wrap_paragraph_at(text, wrap_width.saturating_sub(label_width + 1));
             let mut wrapped_lines = wrapped.lines();
             let first = wrapped_lines.next().unwrap_or("");
             let continuation = " ".repeat(label_width + 1);
@@ -690,8 +1839,22 @@ fn run_inner() -> Result<ExitCode, String> {
 
 /// Assemble a commit message and return the arguments to forward to `git commit`.
 pub fn compose(args: Vec<OsString>) -> Result<(String, Vec<OsString>), String> {
-    let (subject, sections, footers, git_args) = parse_args(args)?;
-    let message = format_message(subject, sections, footers)?;
+    let help_requested = args
+        .iter()
+        .take_while(|arg| arg.as_os_str() != OsStr::new("--"))
+        .any(|arg| {
+            matches!(
+                arg.to_str(),
+                Some("-h" | "--help" | "--help=short" | "--help=long" | "--version")
+            )
+        });
+    let config = if help_requested {
+        ComposeConfig::default()
+    } else {
+        load_user_config()?
+    };
+    let (subject, sections, footers, wrap_width, git_args) = parse_args(args, &config)?;
+    let message = format_message(subject, sections, footers, wrap_width)?;
     Ok((message, git_args))
 }
 

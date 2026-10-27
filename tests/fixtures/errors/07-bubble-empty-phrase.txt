@@ -1,0 +1,4 @@
+--bubble=speaker=cat;phrase=
+
+git-compose-commit: --bubble phrase cannot be empty
+Try 'git-compose-commit --help' for details.

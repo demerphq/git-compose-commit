@@ -62,6 +62,15 @@ fn run_composer(repo: &Path, args: &[&str]) -> Output {
         .expect("run git-compose-commit")
 }
 
+fn run_composer_with_home(repo: &Path, home: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_git-compose-commit"))
+        .args(args)
+        .env("HOME", home)
+        .current_dir(repo)
+        .output()
+        .expect("run git-compose-commit with isolated HOME")
+}
+
 fn committed_message(repo: &Path) -> String {
     let commit = run_git(repo, &["cat-file", "commit", "HEAD"]);
     let commit = String::from_utf8(commit.stdout).expect("commit object is UTF-8");
@@ -84,6 +93,16 @@ fn golden_fixtures_match_full_commit_messages() {
         (
             "04-complete-message",
             include_str!("fixtures/04-complete-message.txt"),
+        ),
+        ("05-bar-charts", include_str!("fixtures/05-bar-charts.txt")),
+        (
+            "06-flow-charts",
+            include_str!("fixtures/06-flow-charts.txt"),
+        ),
+        ("07-bubbles", include_str!("fixtures/07-bubbles.txt")),
+        (
+            "08-fields-callouts-wrap",
+            include_str!("fixtures/08-fields-callouts-wrap.txt"),
         ),
     ];
 
@@ -118,6 +137,30 @@ fn invalid_option_fixtures_match_error_output() {
             "03-orphan-footer",
             include_str!("fixtures/errors/03-orphan-footer.txt"),
         ),
+        (
+            "04-chart-too-few-items",
+            include_str!("fixtures/errors/04-chart-too-few-items.txt"),
+        ),
+        (
+            "05-chart-settings-require-data",
+            include_str!("fixtures/errors/05-chart-settings-require-data.txt"),
+        ),
+        (
+            "06-flow-too-few-boxes",
+            include_str!("fixtures/errors/06-flow-too-few-boxes.txt"),
+        ),
+        (
+            "07-bubble-empty-phrase",
+            include_str!("fixtures/errors/07-bubble-empty-phrase.txt"),
+        ),
+        (
+            "08-field-missing-value",
+            include_str!("fixtures/errors/08-field-missing-value.txt"),
+        ),
+        (
+            "09-invalid-wrap-width",
+            include_str!("fixtures/errors/09-invalid-wrap-width.txt"),
+        ),
     ];
 
     for (name, fixture) in fixtures {
@@ -151,6 +194,16 @@ fn help_switches_between_synopsis_and_detailed_guide() {
     assert!(detailed.status.success());
     let detailed = String::from_utf8(detailed.stdout).expect("help output is UTF-8");
     assert!(detailed.contains("--footer-N TEXT"));
+    assert!(detailed.contains("--hbar-chart DATA"));
+    assert!(detailed.contains("--vbar-chart DATA"));
+    assert!(detailed.contains("--hflow-chart DATA"));
+    assert!(detailed.contains("--vflow-chart DATA"));
+    assert!(detailed.contains("--bubble OPTIONS"));
+    assert!(detailed.contains("--rand-seed N"));
+    assert!(detailed.contains("--field KEY:VALUE"));
+    assert!(detailed.contains("--note TEXT"));
+    assert!(detailed.contains("--warning TEXT"));
+    assert!(detailed.contains("--wrap-width N"));
     assert!(detailed.contains("CSV quoting and escaping"));
 
     let forced_short = run_composer(repo.path(), &["--help=short"]);
@@ -228,4 +281,67 @@ fn rejects_missing_footer_before_invoking_git_commit() {
         .output()
         .expect("check for a commit");
     assert!(!head.status.success());
+}
+
+#[test]
+fn reads_user_defaults_and_cli_overrides_them() {
+    let repo = TestRepo::new();
+    let home = repo.path().join("home");
+    fs::create_dir(&home).expect("create isolated home");
+    fs::write(
+        home.join(".compose-commit.toml"),
+        concat!(
+            "wrap_width = 32\n",
+            "rand_seed = 123\n",
+            "bubble_speaker = \"cat\"\n",
+            "bubble_style = \"thought\"\n",
+            "bubble_speaker_side = \"below\"\n",
+            "bubble_side = \"center\"\n",
+            "bubble_float = \"left\"\n",
+        ),
+    )
+    .expect("write user config");
+
+    let output = run_composer_with_home(
+        repo.path(),
+        &home,
+        &[
+            "--subject=Configured defaults",
+            "--bubble=phrase=Hello",
+            "--allow-empty",
+        ],
+    );
+    assert!(
+        output.status.success(),
+        "composer failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let message = committed_message(repo.path());
+    assert!(message.contains("( o.o )"), "{message:?}");
+    assert!(message.contains("( Hello )"));
+
+    let repo = TestRepo::new();
+    let output = run_composer_with_home(
+        repo.path(),
+        &home,
+        &[
+            "--subject=Command line wins",
+            "--wrap-width=40",
+            "--text=one two three four five six seven eight nine ten eleven twelve",
+            "--bubble=speaker=dog;style=speech;speaker-side=below;bubble-side=center;float=left;phrase=Hello",
+            "--allow-empty",
+        ],
+    );
+    assert!(
+        output.status.success(),
+        "composer failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let message = committed_message(repo.path());
+    assert!(
+        message.contains("one two three four five six seven eight\nnine ten eleven twelve"),
+        "{message:?}"
+    );
+    assert!(message.contains("(    @\\___"));
+    assert!(message.contains("Hello"));
 }

@@ -1,0 +1,25 @@
+--subject=Illustrate the speakers
+--bubble=speaker=cat;style=voice;phrase=Mooooo;speaker-side=left;bubble-side=center;float=left
+--bubble=speaker=dog;style=thought;speaker-side=below;bubble-side=center;phrase=Hmm;float=left
+--bubble=speaker=stick-figure;style=voice;phrase=Hello;speaker-side=right;bubble-side=center;float=left
+--allow-empty
+
+Illustrate the speakers
+
+ /\_/\       .-------.
+( o.o ) <-- ( Mooooo )
+ > ^ <       '-------'
+
+  ( Hmm )
+      O
+       o
+        .
+ / \__
+(    @\___
+ /         O
+/   (_____/
+/_____/   U
+
+ .------.       O
+( Hello ) -->  /|\
+ '------'      / \

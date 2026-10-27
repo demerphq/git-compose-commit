@@ -1,0 +1,16 @@
+--subject=Summarize project metrics
+--hbar-chart=width=10;data=tests:10,docs:5
+--compose-vbar-chart=float=right;height=4;data=tests:10,docs:20
+--allow-empty
+
+Summarize project metrics
+
+                         tests | ########## 10
+                         docs  | ##### 5
+
+                                                        20 |         #
+                                                           |         #
+                                                           |   #     #
+                                                           |   #     #
+                                                         0 +------------
+                                                             tests docs

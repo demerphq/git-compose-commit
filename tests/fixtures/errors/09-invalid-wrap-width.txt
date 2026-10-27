@@ -1,0 +1,4 @@
+--wrap-width=19
+
+git-compose-commit: --wrap-width must be an integer from 20 to 256
+Try 'git-compose-commit --help' for details.

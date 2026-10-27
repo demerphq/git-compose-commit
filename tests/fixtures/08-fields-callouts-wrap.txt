@@ -1,0 +1,28 @@
+--subject=Document runtime settings
+--wrap-width=32
+--text=A long paragraph that will wrap at the requested margin.
+--field=Backend:sqlite
+--field=Endpoint:https://example.test/api/path
+--note=Keep existing configuration files compatible with this change.
+--warning=This migration removes the old index after validation.
+--line=This line remains unwrapped even if it is longer than the configured margin.
+--allow-empty
+
+Document runtime settings
+
+A long paragraph that will wrap
+at the requested margin.
+
+Backend : sqlite
+Endpoint: https://example.test/api/path
+
+Note: Keep existing
+      configuration files
+      compatible with this
+      change.
+
+Warning: This migration removes
+         the old index after
+         validation.
+
+This line remains unwrapped even if it is longer than the configured margin.
