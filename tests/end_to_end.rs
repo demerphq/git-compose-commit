@@ -62,6 +62,43 @@ fn run_composer(repo: &Path, args: &[&str]) -> Output {
         .expect("run git-compose-commit")
 }
 
+fn committed_message(repo: &Path) -> String {
+    let commit = run_git(repo, &["cat-file", "commit", "HEAD"]);
+    let commit = String::from_utf8(commit.stdout).expect("commit object is UTF-8");
+    commit
+        .split_once("\n\n")
+        .expect("commit has a message separator")
+        .1
+        .to_owned()
+}
+
+#[test]
+fn golden_fixtures_match_full_commit_messages() {
+    let fixtures = [
+        ("01-basic", include_str!("fixtures/01-basic.txt")),
+        ("02-table", include_str!("fixtures/02-table.txt")),
+        (
+            "03-lists-and-footers",
+            include_str!("fixtures/03-lists-and-footers.txt"),
+        ),
+    ];
+
+    for (name, fixture) in fixtures {
+        let (arguments, expected) = fixture
+            .split_once("\n\n")
+            .unwrap_or_else(|| panic!("fixture {name} needs an argument/output separator"));
+        let args = arguments.lines().collect::<Vec<_>>();
+        let repo = TestRepo::new();
+        let output = run_composer(repo.path(), &args);
+        assert!(
+            output.status.success(),
+            "fixture {name} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(committed_message(repo.path()), expected, "fixture {name}");
+    }
+}
+
 #[test]
 fn creates_commit_with_composed_sections_and_forwarded_git_options() {
     let repo = TestRepo::new();
@@ -95,14 +132,8 @@ fn creates_commit_with_composed_sections_and_forwarded_git_options() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let commit = run_git(repo.path(), &["cat-file", "commit", "HEAD"]);
-    let commit = String::from_utf8(commit.stdout).expect("commit object is UTF-8");
-    let message = commit
-        .split_once("\n\n")
-        .expect("commit has a message separator")
-        .1;
     assert_eq!(
-        message,
+        committed_message(repo.path()),
         "Exercise the full command\n\nReview `[#99]` and details [#1].\n\n+--------+---------+\n| Name   | State   |\n+--------+---------+\n| cache  | ready   |\n| worker | waiting |\n+--------+---------+\n\n1. Refresh the cache\n2. Verify the state\n\nRefs: #42\n\n[#1] Footer context.\n"
     );
 }

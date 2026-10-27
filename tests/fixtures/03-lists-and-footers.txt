@@ -1,0 +1,19 @@
+--compose-subject=Document update steps
+--compose-text=Review [#1] for more context.
+--compose-footer-1=The update is committed only after validation.
+--compose-list-item=Refresh the cache
+--compose-list=bullets
+--compose-list-item=Verify the new value
+--compose-list-end
+--compose-list-item=Notify readers
+--allow-empty
+
+Document update steps
+
+Review [#1] for more context.
+
+1. Refresh the cache
+  * Verify the new value
+2. Notify readers
+
+[#1] The update is committed only after validation.

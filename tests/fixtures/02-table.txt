@@ -1,0 +1,13 @@
+--subject=Show cache status
+--table-head=Name,State
+--table-rows=cache,ready;worker,waiting
+--allow-empty
+
+Show cache status
+
++--------+---------+
+| Name   | State   |
++--------+---------+
+| cache  | ready   |
+| worker | waiting |
++--------+---------+

@@ -61,4 +61,6 @@ for scripts and long-term use.
 
 Run `cargo test`. Unit tests for the message formatting logic are in
 `src/tests/mod.rs`; end-to-end tests that invoke the executable and inspect
-commits in temporary Git repositories are in `tests/end_to_end.rs`.
+commits in temporary Git repositories are in `tests/end_to_end.rs`. Golden
+fixtures in `tests/fixtures/` list one argument per line, then a blank line,
+then the exact expected commit message.

@@ -1,0 +1,10 @@
+--compose-subject=Refresh cache after writes
+--compose-text=Keep the cached value synchronized with each successful write.
+--compose-line=Refs: #42
+--allow-empty
+
+Refresh cache after writes
+
+Keep the cached value synchronized with each successful write.
+
+Refs: #42
