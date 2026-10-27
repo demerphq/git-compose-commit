@@ -56,3 +56,9 @@ Unprefixed aliases are also supported: `--subject`, `--text`, `--detail`,
 `--list`, `--list-item`, `--list-end`, and `--footer-N`. They may conflict
 with options added by a future Git version, so prefer the `--compose-*` forms
 for scripts and long-term use.
+
+## Tests
+
+Run `cargo test`. Unit tests for the message formatting logic are in
+`src/tests/mod.rs`; end-to-end tests that invoke the executable and inspect
+commits in temporary Git repositories are in `tests/end_to_end.rs`.
