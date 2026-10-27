@@ -1,0 +1,43 @@
+--subject=Compose a complete example
+--text=This paragraph shows automatic wrapping for longer prose in a useful commit message body.
+--text=This is a second paragraph with its own blank-line separation.
+--detail=Keep this literal detail exactly on one line even when it is far too long for normal commit prose.
+--line=Change-ID: I9f123456789012345678901234567890123456789
+--th=Component,Result
+--tr=cache,updated
+--tr=worker,waiting
+--list-item=Refresh the cache
+--bullets
+--list-item=Keep readers on the old version until validation completes
+--list-end
+--list-item=Publish the new generation
+--text=See [#1] for the validation rationale.
+--footer-1=Validation prevents readers from observing a partially updated cache entry.
+--allow-empty
+
+Compose a complete example
+
+This paragraph shows automatic wrapping for longer prose in a useful
+commit message body.
+
+This is a second paragraph with its own blank-line separation.
+
+    Keep this literal detail exactly on one line even when it is far too long for normal commit prose.
+
+Change-ID: I9f123456789012345678901234567890123456789
+
++-----------+---------+
+| Component | Result  |
++-----------+---------+
+| cache     | updated |
+| worker    | waiting |
++-----------+---------+
+
+1. Refresh the cache
+  * Keep readers on the old version until validation completes
+2. Publish the new generation
+
+See [#1] for the validation rationale.
+
+[#1] Validation prevents readers from observing a partially updated
+     cache entry.

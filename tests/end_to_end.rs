@@ -81,6 +81,10 @@ fn golden_fixtures_match_full_commit_messages() {
             "03-lists-and-footers",
             include_str!("fixtures/03-lists-and-footers.txt"),
         ),
+        (
+            "04-complete-message",
+            include_str!("fixtures/04-complete-message.txt"),
+        ),
     ];
 
     for (name, fixture) in fixtures {
@@ -96,6 +100,40 @@ fn golden_fixtures_match_full_commit_messages() {
             String::from_utf8_lossy(&output.stderr)
         );
         assert_eq!(committed_message(repo.path()), expected, "fixture {name}");
+    }
+}
+
+#[test]
+fn invalid_option_fixtures_match_error_output() {
+    let fixtures = [
+        (
+            "01-duplicate-subject",
+            include_str!("fixtures/errors/01-duplicate-subject.txt"),
+        ),
+        (
+            "02-row-without-header",
+            include_str!("fixtures/errors/02-row-without-header.txt"),
+        ),
+        (
+            "03-orphan-footer",
+            include_str!("fixtures/errors/03-orphan-footer.txt"),
+        ),
+    ];
+
+    for (name, fixture) in fixtures {
+        let (arguments, expected_stderr) = fixture
+            .split_once("\n\n")
+            .unwrap_or_else(|| panic!("error fixture {name} needs a separator"));
+        let args = arguments.lines().collect::<Vec<_>>();
+        let repo = TestRepo::new();
+        let output = run_composer(repo.path(), &args);
+        assert_eq!(output.status.code(), Some(2), "fixture {name}");
+        assert!(output.stdout.is_empty(), "fixture {name} wrote stdout");
+        assert_eq!(
+            String::from_utf8(output.stderr).expect("error output is UTF-8"),
+            expected_stderr,
+            "fixture {name}"
+        );
     }
 }
 

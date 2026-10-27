@@ -698,7 +698,8 @@ pub fn run() -> ExitCode {
     match run_inner() {
         Ok(code) => code,
         Err(error) => {
-            eprintln!("git-compose-commit: {error}\n\n{}", usage());
+            eprintln!("git-compose-commit: {error}");
+            eprintln!("Try 'git-compose-commit --help' for details.");
             ExitCode::from(2)
         }
     }

@@ -1,0 +1,5 @@
+--subject=First subject
+--compose-subject=Second subject
+
+git-compose-commit: --compose-subject may only be specified once
+Try 'git-compose-commit --help' for details.

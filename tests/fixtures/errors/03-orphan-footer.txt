@@ -1,0 +1,4 @@
+--footer-4=This footer is never referenced
+
+git-compose-commit: --compose-footer-4 has no matching [#4] reference
+Try 'git-compose-commit --help' for details.

@@ -206,5 +206,7 @@ Run the suite with `cargo test`:
 - `tests/fixtures/` has readable argument-and-output examples. Each line
   before the blank separator is passed as one argument; the rest of the file
   is the exact expected commit message. Fixture lines are not shell-parsed.
+- `tests/fixtures/errors/` records invalid argument combinations and their
+  exact stderr output.
 
 When adding a fixture, list it in `tests/end_to_end.rs`.

@@ -1,0 +1,4 @@
+--tr=cache,ready
+
+git-compose-commit: --compose-table-row requires a preceding --compose-table-head
+Try 'git-compose-commit --help' for details.
