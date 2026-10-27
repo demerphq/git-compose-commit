@@ -35,28 +35,56 @@ struct ListEntry {
     text: String,
 }
 
-fn usage() -> &'static str {
-    "Usage: git-compose-commit [wrapper options] [git commit options] [-- pathspec...]
+fn synopsis() -> &'static str {
+    "git-compose-commit - compose a Git commit message
 
-Message options:
-  --subject TEXT       Set the subject (also --compose-subject; once only)
-  --text TEXT          Add a wrapped prose paragraph (repeatable)
-  --detail TEXT        Add literal text, indented by four spaces
+Usage: git-compose-commit [COMPOSE OPTIONS] [GIT OPTIONS] [-- PATHSPEC...]
+
+Common options: --subject, --text, --line, --th, --tr, --list-item
+Use --help for the full option guide."
+}
+
+fn usage() -> &'static str {
+    "git-compose-commit - compose a Git commit message
+
+Usage: git-compose-commit [COMPOSE OPTIONS] [GIT OPTIONS] [-- PATHSPEC...]
+
+Compose options:
+  -h, --help=short     Show a concise synopsis
+  --help, --help=long  Show this detailed guide
+  --subject TEXT       Set the subject; may be given once
+  --text TEXT          Add a paragraph, wrapped at 72 characters
+  --detail TEXT        Add an unwrapped block, indented by four spaces
   --line TEXT          Add one unwrapped line
-  --th CSV             Table header (also --table-head, --compose-th, --compose-table-head)
-  --tr CSV             Add a table row (also --table-row, --compose-tr, --compose-table-row)
-  --table-rows CSV     Add semicolon-separated rows
-  --footer-N TEXT      Define footer N for a [#N] reference
+  --th CELLS           Start a table with comma-separated headings
+  --tr CELLS           Add one comma-separated row
+  --table-rows ROWS    Add rows separated by semicolons
+  --footer-N TEXT      Define the footer referenced by [#N]
+  --list-item TEXT     Add an item; starts a numbered list if needed
   --numlist            Start a numbered list (also --list=numbered)
   --bullets            Start a bullet list (also --list=bullets)
-  --list KIND          Start a numbered or bullets list
-  --list-item TEXT     Add an item; defaults to a numbered list
-  --list-end           End the current explicit list
+  --list KIND          Start a list: numbered or bullets
+  --list-end           Close the current list and return to its parent
 
-Namespaced equivalents use the --compose- prefix. Unprefixed options may
-conflict with future git commit options; use --compose-* in scripts.
+Options may be written as --option=value or --option value. The subject is
+always first. Body sections appear in argument order, separated by blank
+lines. Footers are collected at the end in number order.
 
-Other arguments are passed to git commit. Use -- to stop parsing wrapper options."
+Footer references are recognized in --text and --line. Every reference needs
+a footer, and every footer must be referenced. References inside backticks
+are ignored.
+
+Tables split cells on commas and rows on semicolons. CSV quoting and escaping
+are not supported. Starting a list inside an open list nests it; a new
+message section closes open lists automatically.
+
+Each compose option also accepts a --compose- prefix, including
+--compose-numlist and --compose-bullets. The short table options also accept
+--table-head/--table-row and --compose-th/--compose-tr. Unprefixed options
+may conflict with future Git options; use the namespaced forms in scripts.
+
+Other arguments are passed to git commit. The -- separator is passed through
+to Git and means that following arguments are pathspecs."
 }
 
 fn as_text(value: &OsStr, option: &str) -> Result<String, String> {
@@ -133,7 +161,11 @@ fn parse_args(
             i += 1;
             continue;
         }
-        if arg == OsStr::new("--help") || arg == OsStr::new("-h") {
+        if arg == OsStr::new("-h") || arg == OsStr::new("--help=short") {
+            println!("{}", synopsis());
+            std::process::exit(0);
+        }
+        if arg == OsStr::new("--help") || arg == OsStr::new("--help=long") {
             println!("{}", usage());
             std::process::exit(0);
         }

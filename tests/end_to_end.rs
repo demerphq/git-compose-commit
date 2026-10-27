@@ -100,6 +100,28 @@ fn golden_fixtures_match_full_commit_messages() {
 }
 
 #[test]
+fn help_switches_between_synopsis_and_detailed_guide() {
+    let repo = TestRepo::new();
+    let short = run_composer(repo.path(), &["-h"]);
+    assert!(short.status.success());
+    let short = String::from_utf8(short.stdout).expect("help output is UTF-8");
+    assert!(short.contains("Usage: git-compose-commit"));
+    assert!(short.contains("Use --help for the full option guide."));
+    assert!(!short.contains("--footer-N TEXT"));
+
+    let detailed = run_composer(repo.path(), &["--help"]);
+    assert!(detailed.status.success());
+    let detailed = String::from_utf8(detailed.stdout).expect("help output is UTF-8");
+    assert!(detailed.contains("--footer-N TEXT"));
+    assert!(detailed.contains("CSV quoting and escaping"));
+
+    let forced_short = run_composer(repo.path(), &["--help=short"]);
+    assert!(String::from_utf8_lossy(&forced_short.stdout).contains("Use --help"));
+    let forced_long = run_composer(repo.path(), &["--help=long"]);
+    assert!(String::from_utf8_lossy(&forced_long.stdout).contains("--table-rows ROWS"));
+}
+
+#[test]
 fn creates_commit_with_composed_sections_and_forwarded_git_options() {
     let repo = TestRepo::new();
     repo.stage_sample_file();
