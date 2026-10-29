@@ -1,0 +1,6 @@
+--flow-chart=direction=vertical
+--flow-node=first:First
+--flow-node=second:Second
+
+git-compose-commit: --flow-chart requires at least one --flow-edge
+Try 'git-compose-commit --help' for details.

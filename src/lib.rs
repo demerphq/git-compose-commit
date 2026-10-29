@@ -28,6 +28,11 @@ const COMPOSE_VALUE_OPTIONS: &[&str] = &[
     "--compose-vbar-chart",
     "--compose-hflow-chart",
     "--compose-vflow-chart",
+    "--compose-flow-chart",
+    "--compose-flow-node",
+    "--compose-flow-decision",
+    "--compose-flow-terminal",
+    "--compose-flow-edge",
     "--compose-bubble",
     "--compose-th",
     "--compose-tr",
@@ -48,6 +53,11 @@ const COMPOSE_VALUE_OPTIONS: &[&str] = &[
     "--vbar-chart",
     "--hflow-chart",
     "--vflow-chart",
+    "--flow-chart",
+    "--flow-node",
+    "--flow-decision",
+    "--flow-terminal",
+    "--flow-edge",
     "--bubble",
     "--th",
     "--tr",
@@ -103,6 +113,7 @@ enum Section {
     },
     BarChart(BarChart),
     FlowChart(FlowChart),
+    FlowDiagram(FlowDiagram),
     Bubble(Bubble),
     List(Vec<ListEntry>),
 }
@@ -120,6 +131,31 @@ struct FlowChart {
     orientation: ChartOrientation,
     alignment: ChartAlignment,
     steps: Vec<String>,
+}
+
+#[derive(Debug)]
+struct FlowDiagram {
+    direction: String,
+    alignment: ChartAlignment,
+    node_sep: f64,
+    rank_sep: f64,
+    nodes: Vec<FlowNode>,
+    edges: Vec<FlowEdge>,
+    node_ids: BTreeSet<String>,
+}
+
+#[derive(Debug)]
+struct FlowNode {
+    id: String,
+    label: String,
+    shape: FlowNodeShape,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct FlowEdge {
+    from: String,
+    to: String,
+    label: Option<String>,
 }
 
 #[derive(Debug)]
@@ -177,6 +213,13 @@ enum ChartOrientation {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FlowNodeShape {
+    Box,
+    Decision,
+    Terminal,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ChartAlignment {
     Left,
     Center,
@@ -201,7 +244,7 @@ fn synopsis() -> &'static str {
 
 Usage: git-compose-commit [COMPOSE OPTIONS] [GIT OPTIONS] [-- PATHSPEC...]
 
-Common options: --subject, --text, --field, --note, --line, --th, --tr
+Common options: --subject, --text, --field, --note, --line, --th, --tr, --flow-chart
 Other: --version
 Use --help for the full option guide."
 }
@@ -222,6 +265,7 @@ Compose options:
   --note TEXT          Add a wrapped, labeled note
   --warning TEXT       Add a wrapped, labeled warning
   --wrap-width N       Set the message margin (default 72; range 20-256)
+  --output FILE        Write the message to FILE without running git commit
   --detail TEXT        Add an unwrapped block, indented by four spaces
   --line TEXT          Add one unwrapped line
   --th CELLS           Start a table with comma-separated headings
@@ -231,6 +275,11 @@ Compose options:
   --vbar-chart DATA    Add an ASCII vertical bar chart
   --hflow-chart DATA   Add an ASCII horizontal flow chart
   --vflow-chart DATA   Add an ASCII vertical flow chart
+  --flow-chart OPTIONS Start a branching flowchart
+  --flow-node ID:TEXT  Add a box to the active flowchart
+  --flow-decision ID:TEXT Add a decision diamond
+  --flow-terminal ID:TEXT Add a rounded start/end node
+  --flow-edge EDGE     Add a DOT-style edge to the active flowchart
   --bubble OPTIONS     Add an ASCII speech or thought bubble
   --footer-N TEXT      Define the footer referenced by [#N]
   --list-item TEXT     Add an item; starts a numbered list if needed
@@ -248,6 +297,9 @@ columns and accepts values from 20 to 256.
 
 The optional ~/.compose-commit.toml file sets user defaults. Command-line
 options override configured defaults. See the README for supported settings.
+
+--output=FILE (also --compose-output=FILE) writes the composed message to a
+file and skips git commit. It cannot be combined with Git commit options.
 
 --field=KEY:VALUE adds an aligned key/value row. Adjacent fields form one
 block. Split at the first colon; keys and values must both be non-empty.
@@ -272,6 +324,16 @@ Flow chart items are comma-separated box labels, with the same optional
 float=left|center|right and data= clauses. Use --hflow-chart for a horizontal
 chain or --vflow-chart for a vertical chain. Flow charts need at least two
 boxes and do not wrap labels.
+
+For branching diagrams, --flow-chart=direction=vertical;float=center starts a
+top-to-bottom directed graph. Use direction=horizontal for a left-to-right
+branching graph. Add nodes with --flow-node=ID:TEXT,
+--flow-decision=ID:TEXT, or --flow-terminal=ID:TEXT. Add links with --flow-edge='FROM -> TO'. A link
+may include a DOT label, for example --flow-edge='FROM -> TO [label=\"yes\"]';
+unlabeled chains such as A -> B -> C are also allowed. Optional nodesep=N and
+ranksep=N settings control horizontal and vertical spacing. The graph closes
+at the next non-flowchart option or end of arguments. DOT is generated
+internally; arbitrary DOT input is not accepted.
 
 Bubbles use speaker=cat|dog|stick-figure and phrase=TEXT, with optional
 style=speech|thought, speaker-side=left|right|below,
@@ -478,6 +540,46 @@ fn rand_seed_option(arg: &OsStr) -> Option<Option<String>> {
     split_equals(arg, "--rand-seed").or_else(|| split_equals(arg, "--compose-rand-seed"))
 }
 
+fn extract_output_option(args: Vec<OsString>) -> Result<(Option<OsString>, Vec<OsString>), String> {
+    let mut output = None;
+    let mut remaining = Vec::new();
+    let mut i = 0;
+    let mut after_separator = false;
+    while i < args.len() {
+        let arg = &args[i];
+        if after_separator || arg == OsStr::new("--") {
+            after_separator = true;
+            remaining.push(arg.clone());
+            i += 1;
+            continue;
+        }
+        let parsed =
+            split_equals(arg, "--output").or_else(|| split_equals(arg, "--compose-output"));
+        if let Some(inline) = parsed {
+            if output.is_some() {
+                return Err("--output may only be specified once".into());
+            }
+            let path = match inline {
+                Some(path) => OsString::from(path),
+                None => {
+                    i += 1;
+                    args.get(i)
+                        .cloned()
+                        .ok_or_else(|| "--output requires a file path".to_owned())?
+                }
+            };
+            if path.is_empty() {
+                return Err("--output requires a file path".into());
+            }
+            output = Some(path);
+        } else {
+            remaining.push(arg.clone());
+        }
+        i += 1;
+    }
+    Ok((output, remaining))
+}
+
 fn is_dynamic_footer_option(arg: &OsStr) -> bool {
     let Some(value) = arg.to_str() else {
         return false;
@@ -554,6 +656,7 @@ fn parse_args(
     let mut saw_wrap_width = false;
     let mut git_args = Vec::new();
     let mut active_table = None;
+    let mut active_flow_diagram = None;
     let mut list_stack: Vec<ListKind> = Vec::new();
     let mut active_list_section = None;
     let mut i = 0;
@@ -567,6 +670,7 @@ fn parse_args(
             continue;
         }
         if arg == OsStr::new("--") {
+            active_flow_diagram = None;
             git_args.push(arg.clone());
             passthrough = true;
             i += 1;
@@ -586,6 +690,7 @@ fn parse_args(
         }
 
         if let Some(inline) = rand_seed_option(arg) {
+            active_flow_diagram = None;
             if inline.is_none() {
                 i += 1;
             }
@@ -621,6 +726,7 @@ fn parse_args(
             })()
         });
         if let Some((number, inline, option_prefix)) = dynamic_footer {
+            active_flow_diagram = None;
             let value = match inline {
                 Some(value) => value,
                 None => {
@@ -643,6 +749,7 @@ fn parse_args(
             continue;
         }
         if arg == OsStr::new("--compose-list-end") || arg == OsStr::new("--list-end") {
+            active_flow_diagram = None;
             if list_stack.pop().is_none() {
                 return Err("--list-end has no open list".into());
             }
@@ -656,6 +763,7 @@ fn parse_args(
             _ => None,
         };
         if let Some(kind) = list_shorthand {
+            active_flow_diagram = None;
             list_stack.push(kind);
             if active_list_section.is_none() {
                 sections.push(Section::List(Vec::new()));
@@ -680,6 +788,7 @@ fn parse_args(
                 return Err(format!("{name} value cannot be empty"));
             }
             if matches!(name, "--wrap-width" | "--compose-wrap-width") {
+                active_flow_diagram = None;
                 if saw_wrap_width {
                     return Err("--wrap-width may only be specified once".into());
                 }
@@ -708,11 +817,26 @@ fn parse_args(
                 "--vbar-chart" => "--compose-vbar-chart",
                 "--hflow-chart" => "--compose-hflow-chart",
                 "--vflow-chart" => "--compose-vflow-chart",
+                "--flow-chart" => "--compose-flow-chart",
+                "--flow-node" => "--compose-flow-node",
+                "--flow-decision" => "--compose-flow-decision",
+                "--flow-terminal" => "--compose-flow-terminal",
+                "--flow-edge" => "--compose-flow-edge",
                 "--bubble" => "--compose-bubble",
                 "--list" => "--compose-list",
                 "--list-item" => "--compose-list-item",
                 _ => name,
             };
+            if !matches!(
+                canonical,
+                "--compose-flow-chart"
+                    | "--compose-flow-node"
+                    | "--compose-flow-decision"
+                    | "--compose-flow-terminal"
+                    | "--compose-flow-edge"
+            ) {
+                active_flow_diagram = None;
+            }
             match canonical {
                 "--compose-subject" => {
                     if subject.replace(value).is_some() {
@@ -821,6 +945,44 @@ fn parse_args(
                     };
                     sections.push(Section::FlowChart(parse_flow_chart(&value, orientation)?));
                 }
+                "--compose-flow-chart" => {
+                    let diagram = parse_flow_diagram_options(&value)?;
+                    sections.push(Section::FlowDiagram(diagram));
+                    active_flow_diagram = Some(sections.len() - 1);
+                    active_table = None;
+                    active_list_section = None;
+                    list_stack.clear();
+                }
+                "--compose-flow-node" | "--compose-flow-decision" | "--compose-flow-terminal" => {
+                    let Some(index) = active_flow_diagram else {
+                        return Err(format!("{name} requires a preceding --flow-chart"));
+                    };
+                    let shape = match canonical {
+                        "--compose-flow-node" => FlowNodeShape::Box,
+                        "--compose-flow-decision" => FlowNodeShape::Decision,
+                        _ => FlowNodeShape::Terminal,
+                    };
+                    let (id, label) = parse_flow_node(&value, shape)?;
+                    let Section::FlowDiagram(diagram) = &mut sections[index] else {
+                        unreachable!()
+                    };
+                    if !diagram.node_ids.insert(id.clone()) {
+                        return Err(format!(
+                            "--flow-chart node '{id}' is defined more than once"
+                        ));
+                    }
+                    diagram.nodes.push(FlowNode { id, label, shape });
+                }
+                "--compose-flow-edge" => {
+                    let Some(index) = active_flow_diagram else {
+                        return Err("--flow-edge requires a preceding --flow-chart".into());
+                    };
+                    let edges = parse_flow_edges(&value)?;
+                    let Section::FlowDiagram(diagram) = &mut sections[index] else {
+                        unreachable!()
+                    };
+                    diagram.edges.extend(edges);
+                }
                 "--compose-bubble" => {
                     sections.push(Section::Bubble(parse_bubble(
                         &value,
@@ -882,10 +1044,12 @@ fn parse_args(
         }
 
         if git_option_takes_value(arg) && i + 1 < args.len() {
+            active_flow_diagram = None;
             git_args.push(arg.clone());
             git_args.push(args[i + 1].clone());
             i += 2;
         } else {
+            active_flow_diagram = None;
             git_args.push(arg.clone());
             i += 1;
         }
@@ -1124,6 +1288,403 @@ fn parse_flow_chart(value: &str, orientation: ChartOrientation) -> Result<FlowCh
         alignment,
         steps,
     })
+}
+
+fn parse_flow_diagram_options(value: &str) -> Result<FlowDiagram, String> {
+    let mut direction = "TD".to_owned();
+    let mut alignment = ChartAlignment::Center;
+    let mut node_sep = 0.8;
+    let mut rank_sep = 1.0;
+    let mut seen = BTreeSet::new();
+    for clause in value.split(';') {
+        let Some((key, setting)) = clause.split_once('=') else {
+            return Err("--flow-chart options must use name=value".into());
+        };
+        if !seen.insert(key) {
+            return Err(format!("--flow-chart {key} may only be specified once"));
+        }
+        match key {
+            "direction" => {
+                direction = match setting {
+                    "vertical" | "TB" => "TB".to_owned(),
+                    "horizontal" | "LR" => "LR".to_owned(),
+                    _ => return Err("--flow-chart direction must be vertical or horizontal".into()),
+                };
+            }
+            "float" => {
+                alignment = match setting {
+                    "left" => ChartAlignment::Left,
+                    "center" => ChartAlignment::Center,
+                    "right" => ChartAlignment::Right,
+                    _ => {
+                        return Err("--flow-chart float must be 'left', 'center', or 'right'".into())
+                    }
+                };
+            }
+            "nodesep" => node_sep = parse_graphviz_spacing("nodesep", setting)?,
+            "ranksep" => rank_sep = parse_graphviz_spacing("ranksep", setting)?,
+            _ => return Err(format!("--flow-chart has unknown option '{key}'")),
+        }
+    }
+    Ok(FlowDiagram {
+        direction,
+        alignment,
+        node_sep,
+        rank_sep,
+        nodes: Vec::new(),
+        edges: Vec::new(),
+        node_ids: BTreeSet::new(),
+    })
+}
+
+fn parse_graphviz_spacing(key: &str, value: &str) -> Result<f64, String> {
+    let spacing = value
+        .parse::<f64>()
+        .map_err(|_| format!("--flow-chart {key} must be a number greater than zero"))?;
+    if !spacing.is_finite() || spacing <= 0.0 || spacing > 10.0 {
+        return Err(format!(
+            "--flow-chart {key} must be greater than zero and at most 10"
+        ));
+    }
+    Ok(spacing)
+}
+
+fn parse_flow_node(value: &str, _shape: FlowNodeShape) -> Result<(String, String), String> {
+    let Some((id, label)) = value.split_once(':') else {
+        return Err("flow nodes must use ID:LABEL".into());
+    };
+    let id = id.trim();
+    let label = label.trim();
+    if !valid_flow_node_id(id) {
+        return Err(format!(
+            "flow node ID '{id}' must start with a letter or underscore and contain only letters, digits, and underscores"
+        ));
+    }
+    if label.is_empty() || label.contains('\n') || label.contains('\r') {
+        return Err("flow node labels must be non-empty and on one line".into());
+    }
+    Ok((id.to_owned(), label.to_owned()))
+}
+
+fn parse_flow_edges(value: &str) -> Result<Vec<FlowEdge>, String> {
+    if value.contains('\n') || value.contains('\r') {
+        return Err("--flow-edge must be a single line".into());
+    }
+    let (chain, label) = if let Some((chain, label_clause)) = value.split_once("[label=") {
+        let label_clause = label_clause.trim();
+        let Some(label) = label_clause
+            .strip_suffix(']')
+            .and_then(|label| label.trim().strip_prefix('"'))
+            .and_then(|label| label.strip_suffix('"'))
+        else {
+            return Err("--flow-edge labels must use [label=\"TEXT\"]".into());
+        };
+        if chain.contains("->") {
+            let segments = chain.split("->").collect::<Vec<_>>();
+            if segments.len() != 2 {
+                return Err("labeled --flow-edge must contain exactly one '->'".into());
+            }
+        }
+        if label.is_empty() {
+            return Err("--flow-edge labels must not be empty".into());
+        }
+        (chain.trim(), Some(label.trim().to_owned()))
+    } else {
+        (value.trim(), None)
+    };
+    let ids = chain.split("->").map(str::trim).collect::<Vec<_>>();
+    if ids.len() < 2 || ids.iter().any(|id| !valid_flow_node_id(id)) {
+        return Err("--flow-edge must use DOT syntax such as 'FROM -> TO'".into());
+    }
+    if label.is_some() && ids.len() != 2 {
+        return Err("labeled --flow-edge must contain exactly one '->'".into());
+    }
+    Ok(ids
+        .windows(2)
+        .enumerate()
+        .map(|(index, pair)| FlowEdge {
+            from: pair[0].to_owned(),
+            to: pair[1].to_owned(),
+            label: (index == 0).then(|| label.clone()).flatten(),
+        })
+        .collect())
+}
+
+fn valid_flow_node_id(id: &str) -> bool {
+    let mut chars = id.chars();
+    chars
+        .next()
+        .is_some_and(|ch| ch.is_ascii_alphabetic() || ch == '_')
+        && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+}
+
+fn escape_dot_label(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+fn to_ascii_diagram(value: &str) -> String {
+    let ascii = value
+        .chars()
+        .map(|ch| match ch {
+            '┌' | '┐' | '└' | '┘' | '├' | '┤' | '┬' | '┴' | '┼' => '+',
+            '─' => '-',
+            '│' => '|',
+            '▼' => 'v',
+            '▲' => '^',
+            '▶' => '>',
+            '◀' => '<',
+            other => other,
+        })
+        .collect::<String>();
+    ascii
+        .lines()
+        .map(str::trim_end)
+        .skip_while(|line| line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn style_flow_nodes(rendered: &str, nodes: &[FlowNode]) -> String {
+    let mut rows = rendered
+        .lines()
+        .map(|line| line.chars().collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+
+    for node in nodes.iter().filter(|node| node.shape != FlowNodeShape::Box) {
+        let label = node.label.chars().collect::<Vec<_>>();
+        let Some((row_index, left, right)) =
+            rows.iter().enumerate().find_map(|(row_index, row)| {
+                let label_start = row.windows(label.len()).position(|part| part == label)?;
+                let left = row[..label_start].iter().rposition(|ch| *ch == '|')?;
+                let right = row[label_start + label.len()..]
+                    .iter()
+                    .position(|ch| *ch == '|')?
+                    + label_start
+                    + label.len();
+                if row_index == 0 || row_index + 1 >= rows.len() {
+                    return None;
+                }
+                let top = &rows[row_index - 1];
+                let bottom = &rows[row_index + 1];
+                (top.get(left) == Some(&'+')
+                    && top.get(right) == Some(&'+')
+                    && bottom.get(left) == Some(&'+')
+                    && bottom.get(right) == Some(&'+'))
+                .then_some((row_index, left, right))
+            })
+        else {
+            continue;
+        };
+
+        match node.shape {
+            FlowNodeShape::Box => {}
+            FlowNodeShape::Decision => {
+                rows[row_index - 1][left] = '/';
+                rows[row_index - 1][right] = '\\';
+                rows[row_index][left] = '|';
+                rows[row_index][right] = '|';
+                rows[row_index + 1][left] = '\\';
+                rows[row_index + 1][right] = '/';
+            }
+            FlowNodeShape::Terminal => {
+                for row in [row_index - 1, row_index, row_index + 1] {
+                    rows[row][left] = '(';
+                    rows[row][right] = ')';
+                }
+            }
+        }
+    }
+    rows.into_iter()
+        .map(|row| row.into_iter().collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn render_horizontal_dot(dot: &str) -> Result<String, String> {
+    let graph = hascii::graphviz::layout(dot)
+        .map_err(|error| format!("could not lay out --flow-chart: {error}"))?;
+    let labels = graph
+        .nodes
+        .iter()
+        .map(|node| node.label.clone())
+        .collect::<Vec<_>>();
+    let scale = hascii::scale::ScaleParams::compute(&graph.bb, &graph.nodes, &labels);
+    let rects = graph
+        .nodes
+        .iter()
+        .zip(&labels)
+        .map(|(node, label)| scale.node_rect(node, label))
+        .collect::<Vec<_>>();
+    let mut grid = hascii::grid::CharGrid::new(scale.grid_w, scale.grid_h);
+    hascii::render_nodes::render_nodes(&mut grid, &graph.nodes, &labels, &scale, true);
+
+    let mut outgoing = vec![Vec::new(); graph.nodes.len()];
+    let mut incoming = vec![Vec::new(); graph.nodes.len()];
+    for (edge_index, edge) in graph.edges.iter().enumerate() {
+        outgoing[edge.tail_idx].push(edge_index);
+        incoming[edge.head_idx].push(edge_index);
+    }
+    let mut turn_columns = vec![None; graph.edges.len()];
+    let mut shared_fanouts = vec![false; graph.nodes.len()];
+    for edge_indices in outgoing.iter().filter(|edges| edges.len() > 1) {
+        let first = &graph.edges[edge_indices[0]];
+        let same_label = edge_indices
+            .iter()
+            .all(|&index| graph.edges[index].label == first.label);
+        shared_fanouts[first.tail_idx] = same_label;
+        let source_col = rects[first.tail_idx].right() + 1;
+        let nearest_target_col = edge_indices
+            .iter()
+            .map(|&index| rects[graph.edges[index].head_idx].left.saturating_sub(1))
+            .min_by_key(|&col| source_col.abs_diff(col))
+            .unwrap_or(source_col);
+        let shared_col =
+            source_col.min(nearest_target_col) + source_col.abs_diff(nearest_target_col) / 2;
+        for &index in edge_indices {
+            turn_columns[index] = Some(shared_col);
+        }
+    }
+    for edge_indices in incoming.iter().filter(|edges| edges.len() > 1) {
+        let first = &graph.edges[edge_indices[0]];
+        let target_col = rects[first.head_idx].left.saturating_sub(1);
+        let nearest_source_col = edge_indices
+            .iter()
+            .map(|&index| rects[graph.edges[index].tail_idx].right() + 1)
+            .min_by_key(|&col| target_col.abs_diff(col))
+            .unwrap_or(target_col);
+        let shared_col =
+            nearest_source_col.min(target_col) + nearest_source_col.abs_diff(target_col) / 2;
+        for &index in edge_indices {
+            turn_columns[index].get_or_insert(shared_col);
+        }
+    }
+
+    for (edge_index, edge) in graph.edges.iter().enumerate() {
+        let source = &rects[edge.tail_idx];
+        let target = &rects[edge.head_idx];
+        let (start_col, end_col) = if source.center_col() <= target.center_col() {
+            (source.right() + 1, target.left.saturating_sub(1))
+        } else {
+            (source.left.saturating_sub(1), target.right() + 1)
+        };
+        let separate_labeled_branch = outgoing[edge.tail_idx].len() > 1
+            && !shared_fanouts[edge.tail_idx]
+            && edge.label.is_some();
+        let start_row = if separate_labeled_branch && target.center_row() < source.center_row() {
+            source.center_row().saturating_sub(1)
+        } else if separate_labeled_branch && target.center_row() > source.center_row() {
+            source.center_row() + 1
+        } else {
+            source.center_row()
+        };
+        let start = (start_row, start_col);
+        let end = (target.center_row(), end_col);
+        let turn_col = turn_columns[edge_index]
+            .unwrap_or_else(|| start_col.min(end_col) + start_col.abs_diff(end_col) / 2);
+        let path = if start.0 == end.0 {
+            vec![start, end]
+        } else {
+            vec![start, (start.0, turn_col), (end.0, turn_col), end]
+        };
+        draw_flow_edge_path(&mut grid, &path);
+        let previous = path[path.len() - 2];
+        let arrow = if end.1 > previous.1 {
+            '>'
+        } else if end.1 < previous.1 {
+            '<'
+        } else if end.0 > previous.0 {
+            'v'
+        } else {
+            '^'
+        };
+        grid.set(end.0, end.1, hascii::grid::Cell::Arrow(arrow));
+
+        if let Some(label) = &edge.label {
+            if separate_labeled_branch && start.0 != end.0 {
+                let label_start = start_col + 1;
+                draw_edge_label(&mut grid, start.0, label_start, label.trim());
+            } else if outgoing[edge.tail_idx].len() > 1 && start.0 != end.0 {
+                let label_row = if end.0 > start.0 {
+                    start.0 + 1
+                } else {
+                    start.0.saturating_sub(1)
+                };
+                draw_edge_label(&mut grid, label_row, turn_col + 1, label.trim());
+            } else if let Some(label_pos) = &edge.label_pos {
+                let (row, center_col) = scale.to_grid(label_pos);
+                let chars = label.chars().collect::<Vec<_>>();
+                let label_start = center_col.saturating_sub(chars.len() / 2);
+                for (offset, ch) in chars.into_iter().enumerate() {
+                    grid.set(row, label_start + offset, hascii::grid::Cell::EdgeLabel(ch));
+                }
+            }
+        }
+    }
+    Ok(grid.render())
+}
+
+fn draw_edge_label(grid: &mut hascii::grid::CharGrid, row: usize, col: usize, label: &str) {
+    grid.set(row, col, hascii::grid::Cell::EdgeLabel(' '));
+    for (offset, ch) in label.chars().enumerate() {
+        grid.set(row, col + offset + 1, hascii::grid::Cell::EdgeLabel(ch));
+    }
+    grid.set(
+        row,
+        col + label.chars().count() + 1,
+        hascii::grid::Cell::EdgeLabel(' '),
+    );
+}
+
+fn draw_flow_edge_path(grid: &mut hascii::grid::CharGrid, path: &[(usize, usize)]) {
+    for segment in path.windows(2) {
+        let (from_row, from_col) = segment[0];
+        let (to_row, to_col) = segment[1];
+        let distance = from_row.abs_diff(to_row) + from_col.abs_diff(to_col);
+        for step in 0..=distance {
+            let row = if to_row >= from_row {
+                from_row + step.min(to_row - from_row)
+            } else {
+                from_row - step.min(from_row - to_row)
+            };
+            let col = if to_col >= from_col {
+                from_col + step.min(to_col - from_col)
+            } else {
+                from_col - step.min(from_col - to_col)
+            };
+            let mut links = hascii::chars::Connectivity::default();
+            if step > 0 {
+                if row < from_row || col < from_col {
+                    if row < from_row {
+                        links.down = true;
+                    } else {
+                        links.right = true;
+                    }
+                } else if row > from_row || col > from_col {
+                    if row > from_row {
+                        links.up = true;
+                    } else {
+                        links.left = true;
+                    }
+                }
+            }
+            if step < distance {
+                if to_row < from_row || to_col < from_col {
+                    if to_row < from_row {
+                        links.up = true;
+                    } else {
+                        links.left = true;
+                    }
+                } else if to_row > from_row || to_col > from_col {
+                    if to_row > from_row {
+                        links.down = true;
+                    } else {
+                        links.right = true;
+                    }
+                }
+            }
+            grid.draw_edge_segment(row, col, links);
+        }
+    }
 }
 
 fn parse_bubble(
@@ -1743,6 +2304,7 @@ fn format_message(
             Section::Table { head, rows } => format_table(&head, &rows),
             Section::BarChart(chart) => format_bar_chart(&chart, wrap_width),
             Section::FlowChart(chart) => format_flow_chart(&chart, wrap_width),
+            Section::FlowDiagram(diagram) => format_flow_diagram(&diagram, wrap_width)?,
             Section::Bubble(bubble) => format_bubble(&bubble, wrap_width),
             Section::List(items) => format_list(&items, wrap_width),
         };
@@ -1784,6 +2346,64 @@ fn format_message(
     Ok(parts.join("\n\n") + "\n")
 }
 
+fn format_flow_diagram(diagram: &FlowDiagram, wrap_width: usize) -> Result<String, String> {
+    if diagram.node_ids.len() < 2 {
+        return Err("--flow-chart requires at least two declared nodes".into());
+    }
+    if diagram.edges.is_empty() {
+        return Err("--flow-chart requires at least one --flow-edge".into());
+    }
+    for edge in &diagram.edges {
+        for id in [&edge.from, &edge.to] {
+            if !diagram.node_ids.contains(id) {
+                return Err(format!("--flow-edge references undefined node '{id}'"));
+            }
+        }
+    }
+
+    let mut dot = format!(
+        "digraph {{\n    graph [rankdir={}, nodesep={}, ranksep={}];\n",
+        diagram.direction, diagram.node_sep, diagram.rank_sep
+    );
+    for node in &diagram.nodes {
+        let shape = match node.shape {
+            FlowNodeShape::Box => "box",
+            FlowNodeShape::Decision => "diamond",
+            FlowNodeShape::Terminal => "oval",
+        };
+        dot.push_str(&format!(
+            "    {} [label=\"{}\", shape={}];\n",
+            node.id,
+            escape_dot_label(&node.label),
+            shape
+        ));
+    }
+    for edge in &diagram.edges {
+        match &edge.label {
+            Some(label) => dot.push_str(&format!(
+                "    {} -> {} [label=\"{}\"];\n",
+                edge.from,
+                edge.to,
+                escape_dot_label(&format!(" {label} "))
+            )),
+            None => dot.push_str(&format!("    {} -> {};\n", edge.from, edge.to)),
+        }
+    }
+    dot.push_str("}\n");
+
+    let rendered = if diagram.direction == "LR" {
+        render_horizontal_dot(&dot)?
+    } else {
+        let mut options = hascii::RenderOptions::default();
+        options.border_mode = hascii::BorderMode::Plain;
+        hascii::render(&dot, &options)
+            .map_err(|error| format!("could not render --flow-chart: {error}"))?
+    };
+    let rendered = to_ascii_diagram(rendered.trim_end());
+    let rendered = style_flow_nodes(&rendered, &diagram.nodes);
+    Ok(align_block(&rendered, diagram.alignment, wrap_width))
+}
+
 fn create_message_file(message: &str) -> io::Result<PathBuf> {
     let dir = env::temp_dir();
     for _ in 0..100 {
@@ -1812,7 +2432,20 @@ fn create_message_file(message: &str) -> io::Result<PathBuf> {
 }
 
 fn run_inner() -> Result<ExitCode, String> {
-    let (message, git_args) = compose(env::args_os().skip(1).collect())?;
+    let (output_path, args) = extract_output_option(env::args_os().skip(1).collect())?;
+    let (message, git_args) = compose(args)?;
+    if let Some(output_path) = output_path {
+        if !git_args.is_empty() {
+            return Err("--output cannot be combined with Git commit options".into());
+        }
+        fs::write(&output_path, message).map_err(|error| {
+            format!(
+                "could not write {}: {error}",
+                PathBuf::from(&output_path).display()
+            )
+        })?;
+        return Ok(ExitCode::SUCCESS);
+    }
     let path = create_message_file(&message)
         .map_err(|e| format!("could not write temporary commit message: {e}"))?;
 

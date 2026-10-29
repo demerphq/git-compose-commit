@@ -108,6 +108,65 @@ fn flow_chart_requires_data_clause_when_configured_and_two_boxes() {
 }
 
 #[test]
+fn parses_operation_style_flowchart_nodes_and_settings() {
+    let diagram =
+        parse_flow_diagram_options("direction=horizontal;float=right;nodesep=0.6;ranksep=1.2")
+            .unwrap();
+    assert_eq!(diagram.direction, "LR");
+    assert_eq!(diagram.alignment, ChartAlignment::Right);
+    assert_eq!(diagram.node_sep, 0.6);
+    assert_eq!(diagram.rank_sep, 1.2);
+    assert_eq!(
+        parse_flow_node("check:Has value?", FlowNodeShape::Decision).unwrap(),
+        ("check".to_owned(), "Has value?".to_owned())
+    );
+    assert_eq!(escape_dot_label(r#"Has "value"?"#), r#"Has \"value\"?"#);
+    assert_eq!(
+        parse_flow_edges("start -> check [label=\"valid\"]").unwrap(),
+        vec![FlowEdge {
+            from: "start".to_owned(),
+            to: "check".to_owned(),
+            label: Some("valid".to_owned()),
+        }]
+    );
+    assert_eq!(parse_flow_edges("start -> check -> save").unwrap().len(), 2);
+}
+
+#[test]
+fn rejects_bad_flowchart_ids_and_edges() {
+    assert!(parse_flow_node("bad-id:Label", FlowNodeShape::Box).is_err());
+    assert_eq!(
+        parse_flow_node("end:Label", FlowNodeShape::Box).unwrap().0,
+        "end"
+    );
+    assert!(parse_flow_edges("start to finish").is_err());
+    assert!(parse_flow_diagram_options("direction=diagonal").is_err());
+    assert!(parse_flow_diagram_options("nodesep=0").is_err());
+}
+
+#[test]
+fn flowchart_nodes_get_ascii_shapes_and_edges_stay_ascii() {
+    let input = "\n+-------+\n| Start |\n+-------+\n+--------+\n| Valid? |\n+--------+";
+    let nodes = vec![
+        FlowNode {
+            id: "start".into(),
+            label: "Start".into(),
+            shape: FlowNodeShape::Terminal,
+        },
+        FlowNode {
+            id: "valid".into(),
+            label: "Valid?".into(),
+            shape: FlowNodeShape::Decision,
+        },
+    ];
+    assert_eq!(
+        style_flow_nodes(input, &nodes),
+        "\n(-------)\n( Start )\n(-------)\n/--------\\\n| Valid? |\n\\--------/"
+    );
+    assert_eq!(to_ascii_diagram("┌─┐\n│▼│\n└─┘"), "+-+\n|v|\n+-+");
+}
+
+#[test]
 fn renders_speech_and_thought_bubbles_with_each_speaker() {
     assert_eq!(
         message(&["--bubble=speaker=cat;style=voice;speaker-side=below;bubble-side=center;phrase=Mooooo;float=left"]),

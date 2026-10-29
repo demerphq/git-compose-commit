@@ -34,6 +34,16 @@ You need Git and a Rust toolchain. Use `git-compose-commit -h` (or
 `--help=long`) for the detailed option guide. Use `--version` to print the
 installed version.
 
+To inspect a composed message without creating a commit, use `--output FILE`.
+It writes the message and skips `git commit`:
+
+```sh
+git-compose-commit --subject 'Preview this message' --text 'No commit is made.' --output /tmp/message.txt
+```
+
+The namespaced form is `--compose-output`. Output mode cannot be combined
+with Git commit options.
+
 ## User defaults
 
 The optional `~/.compose-commit.toml` file sets defaults for wrapping,
@@ -200,9 +210,49 @@ or semicolon-separated settings with a required `data=` list.
 --vflow-chart='Input,Transform,Output'
 ```
 
-Flow charts default to centered alignment. Labels stay on one line and are
-sized to fit the widest box. At least two labels are required; branches and
-free positioning are not supported.
+These linear flow charts default to centered alignment. Labels stay on one
+line and are sized to fit the widest box. At least two labels are required.
+
+## Branching flowcharts
+
+Use `--flow-chart` to start a graph, then define nodes and links with repeated
+options. The graph is rendered as one message block and closes when the next
+non-flowchart option appears or the arguments end:
+
+```sh
+git-compose-commit \
+  --subject 'Validate uploads before saving' \
+  --flow-chart='direction=vertical;float=center;nodesep=0.8;ranksep=1.0' \
+  --flow-terminal='start:Start' \
+  --flow-node='read:Read input' \
+  --flow-decision='valid:Valid?' \
+  --flow-node='save:Save' \
+  --flow-node='reject:Report error' \
+  --flow-terminal='done:Done' \
+  --flow-edge='start -> read' \
+  --flow-edge='read -> valid' \
+  --flow-edge='valid -> save [label="yes"]' \
+  --flow-edge='valid -> reject [label="no"]' \
+  --flow-edge='save -> done' \
+  --flow-edge='reject -> done' \
+  --output /tmp/message.txt
+```
+
+Node IDs start with a letter or underscore and contain only letters, digits,
+and underscores. `--flow-node` makes a box, `--flow-decision` a diamond, and
+`--flow-terminal` an oval start/end node. Edge arguments use DOT-style directed
+links, for example `FROM -> TO`; labels use DOT-style `[label="TEXT"]`
+attributes. Unlabeled chains such as `A -> B -> C` are also accepted. The
+wrapper generates DOT internally; arbitrary DOT source is not accepted. Set
+`direction=vertical|horizontal`, `float=left|center|right`, and optionally
+`nodesep=N` and `ranksep=N` (each greater than zero and at most 10). Direction
+defaults to vertical, float defaults to center, and spacing defaults are 0.8
+and 1.0. A graph needs at least two declared nodes and one edge. Nested graphs
+are not supported. Branching diagrams are laid out with Graphviz, which must
+be installed and available as `dot`.
+In horizontal graphs, branches from one node align their turn columns. If
+their labels differ, they take separate paths; edges merging into one node
+share a vertical column.
 
 ## Speech and thought bubbles
 
@@ -330,6 +380,12 @@ when you want to avoid that risk.
 | `--vbar-chart` | `--compose-vbar-chart` |
 | `--hflow-chart` | `--compose-hflow-chart` |
 | `--vflow-chart` | `--compose-vflow-chart` |
+| `--flow-chart` | `--compose-flow-chart` |
+| `--flow-node` | `--compose-flow-node` |
+| `--flow-decision` | `--compose-flow-decision` |
+| `--flow-terminal` | `--compose-flow-terminal` |
+| `--flow-edge` | `--compose-flow-edge` |
+| `--output` | `--compose-output` |
 | `--bubble` | `--compose-bubble` |
 | `--rand-seed` | `--compose-rand-seed` |
 | `--numlist` | `--compose-numlist` |

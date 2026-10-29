@@ -104,6 +104,14 @@ fn golden_fixtures_match_full_commit_messages() {
             "08-fields-callouts-wrap",
             include_str!("fixtures/08-fields-callouts-wrap.txt"),
         ),
+        (
+            "09-flow-diagram-branching",
+            include_str!("fixtures/09-flow-diagram-branching.txt"),
+        ),
+        (
+            "10-flow-diagram-horizontal",
+            include_str!("fixtures/10-flow-diagram-horizontal.txt"),
+        ),
     ];
 
     for (name, fixture) in fixtures {
@@ -161,6 +169,10 @@ fn invalid_option_fixtures_match_error_output() {
             "09-invalid-wrap-width",
             include_str!("fixtures/errors/09-invalid-wrap-width.txt"),
         ),
+        (
+            "10-flow-diagram-no-edge",
+            include_str!("fixtures/errors/10-flow-diagram-no-edge.txt"),
+        ),
     ];
 
     for (name, fixture) in fixtures {
@@ -198,6 +210,9 @@ fn help_switches_between_synopsis_and_detailed_guide() {
     assert!(detailed.contains("--vbar-chart DATA"));
     assert!(detailed.contains("--hflow-chart DATA"));
     assert!(detailed.contains("--vflow-chart DATA"));
+    assert!(detailed.contains("--flow-chart OPTIONS"));
+    assert!(detailed.contains("--flow-edge EDGE"));
+    assert!(detailed.contains("--output FILE"));
     assert!(detailed.contains("--bubble OPTIONS"));
     assert!(detailed.contains("--rand-seed N"));
     assert!(detailed.contains("--field KEY:VALUE"));
@@ -344,4 +359,76 @@ fn reads_user_defaults_and_cli_overrides_them() {
     );
     assert!(message.contains("(    @\\___"));
     assert!(message.contains("Hello"));
+}
+
+#[test]
+fn writes_branching_ascii_flowchart_to_file_without_running_git() {
+    let repo = TestRepo::new();
+    let output_path = repo.path().join("preview.txt");
+    let output_arg = output_path.to_str().expect("temporary path is UTF-8");
+    let output = run_composer(
+        repo.path(),
+        &[
+            "--subject=Validate uploads",
+            "--flow-chart=direction=vertical;float=left;nodesep=0.8;ranksep=1.0",
+            "--flow-terminal=start:Start",
+            "--flow-node=read:Read input",
+            "--flow-decision=valid:Valid?",
+            "--flow-node=save:Save",
+            "--flow-node=reject:Report error",
+            "--flow-terminal=done:Done",
+            "--flow-edge=start -> read",
+            "--flow-edge=read -> valid",
+            "--flow-edge=valid -> save [label=\"yes\"]",
+            "--flow-edge=valid -> reject [label=\"no\"]",
+            "--flow-edge=save -> done",
+            "--flow-edge=reject -> done",
+            "--compose-output",
+            output_arg,
+        ],
+    );
+    assert!(
+        output.status.success(),
+        "composer failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stdout.is_empty());
+    let message = fs::read_to_string(&output_path).expect("read composed preview");
+    assert!(message.starts_with("Validate uploads\n\n"));
+    for label in [
+        "Start",
+        "Read input",
+        "Valid?",
+        "Save",
+        "Report error",
+        "Done",
+    ] {
+        assert!(message.contains(label), "missing {label:?} in {message:?}");
+    }
+    assert!(
+        message.is_ascii(),
+        "diagram output should be ASCII: {message:?}"
+    );
+
+    let head = Command::new("git")
+        .args(["rev-parse", "--verify", "HEAD"])
+        .current_dir(repo.path())
+        .output()
+        .expect("check that output mode did not create a commit");
+    assert!(!head.status.success());
+}
+
+#[test]
+fn output_mode_rejects_git_commit_options() {
+    let repo = TestRepo::new();
+    let output_path = repo.path().join("preview.txt");
+    let output_arg = output_path.to_str().expect("temporary path is UTF-8");
+    let output = run_composer(
+        repo.path(),
+        &["--subject=Preview", "--output", output_arg, "--all"],
+    );
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr)
+        .contains("--output cannot be combined with Git commit options"));
+    assert!(!output_path.exists());
 }

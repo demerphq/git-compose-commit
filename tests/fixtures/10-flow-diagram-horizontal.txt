@@ -1,0 +1,25 @@
+--subject=Validate uploads left to right
+--flow-chart=direction=horizontal;float=center;nodesep=0.5;ranksep=0.5
+--flow-terminal=start:Start
+--flow-decision=valid:Valid?
+--flow-node=save:Save
+--flow-node=reject:Report error
+--flow-terminal=done:Done
+--flow-edge=start -> valid
+--flow-edge=valid -> save [label="yes"]
+--flow-edge=valid -> reject [label="no"]
+--flow-edge=save -> done
+--flow-edge=reject -> done
+--allow-empty
+
+Validate uploads left to right
+
+                                                +------+
+                                    +---------->| Save |------+
+                                    |           +------+      |
+  (-------)         /--------\- yes +                         |   (------)
+  ( Start )-------->| Valid? |                                +-->( Done )
+  (-------)         \--------/- no -+                         |   (------)
+                                    |       +--------------+  |
+                                    +------>| Report error |--+
+                                            +--------------+

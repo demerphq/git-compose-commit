@@ -1,0 +1,55 @@
+--subject=Validate uploads
+--flow-chart=direction=vertical;float=center;nodesep=0.8;ranksep=1.0
+--flow-terminal=start:Start
+--flow-node=read:Read input
+--flow-decision=valid:Valid?
+--flow-node=save:Save
+--flow-node=reject:Report error
+--flow-terminal=done:Done
+--flow-edge=start -> read
+--flow-edge=read -> valid
+--flow-edge=valid -> save [label="yes"]
+--flow-edge=valid -> reject [label="no"]
+--flow-edge=save -> done
+--flow-edge=reject -> done
+--allow-empty
+
+Validate uploads
+
+                              (-------)
+                              ( Start )
+                              (-------)
+                                  |
+                                  |
+                                  |
+                                  |
+                                  v
+                           +------------+
+                           | Read input |
+                           +------------+
+                                  |
+                                  |
+                                  |
+                                  |
+                                  |
+                                  v
+                             /--------\
+                             | Valid? |
+                             \--------/
+                                  |
+                                  |
+                        +---------+----------+
+                        | yes                | no
+                        |                    |
+                        v                    v
+                    +------+         +--------------+
+                    | Save |         | Report error |
+                    +------+         +--------------+
+                        |                    |
+                        |                    |
+                        |                    |
+                        +---------+----------+
+                                  v
+                              (------)
+                              ( Done )
+                              (------)

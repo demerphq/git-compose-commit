@@ -5,6 +5,9 @@ edition = "2021"
 description = "Build well-formatted Git commit messages from the command line"
 license = "MIT"
 
+[dependencies]
+hascii = "0.1.3"
+
 [[bin]]
 name = "git-compose-commit"
 path = "src/main.rs"
