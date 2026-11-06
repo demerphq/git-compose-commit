@@ -1,0 +1,17 @@
+git-compose-commit - build a message and run git commit
+
+Usage: git-compose-commit [COMPOSE OPTIONS] [GIT OPTIONS] [-- PATHSPEC...]
+
+Create a commit:
+  git-compose-commit --subject 'Refresh cache' --text 'Update readers.' --all
+
+Preview without committing:
+  git-compose-commit --subject 'Refresh cache' --text 'Update readers.' \
+    --stdout
+
+Message:   --subject, --text, --detail, --line, --field, --note, --warning
+Structure: --th/--tr, --list-item, --numlist, --bullets, --footer-N
+Visuals:   --bubble, --hbar-chart, --vbar-chart, --flow-chart
+Control:   --stdout, --output, --wrap-width, --rand-seed, --version
+
+Use --help or --man for examples, all options, and syntax.

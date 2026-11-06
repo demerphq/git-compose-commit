@@ -1,0 +1,290 @@
+git-compose-commit - build a message and run git commit
+
+Usage: git-compose-commit [COMPOSE OPTIONS] [GIT OPTIONS] [-- PATHSPEC...]
+
+HOW IT WORKS
+
+  The subject is first. Other sections keep argument order and are separated
+  by blank lines. Git options such as --all and --signoff pass to git commit.
+  Use -- PATHSPEC... to pass paths to Git. Do not pass Git's -m or -F options
+  because this tool supplies the message file. --stdout and --output preview
+  the message without committing and cannot be mixed with Git commit options.
+
+MESSAGE OPTIONS
+
+  --subject TEXT       Subject line; may appear once
+  --text TEXT          Paragraph; normalize whitespace and wrap at the margin
+  --detail TEXT        Preserve line breaks and indent every line four spaces
+  --line TEXT          Add one unwrapped line; no embedded newline
+  --field KEY:VALUE    Add an aligned key/value row
+  --note TEXT          Add a wrapped Note: paragraph
+  --warning TEXT       Add a wrapped Warning: paragraph
+  --wrap-width N       Set wrapping and alignment margin (20-256; default 72)
+
+  Repeat --text, --detail, and --line to add more sections. Adjacent --field
+  options form one block. A field splits at its first colon; both sides must
+  be nonempty. Words longer than the margin remain intact.
+
+OUTPUT AND CONTROL
+
+  --stdout             Print the message to standard output; skip git commit
+  --output FILE        Write the message to FILE; skip git commit
+  --rand-seed N        Repeat random bubble choices with the same seed
+
+  --stdout is the portable equivalent of --output /dev/stdout. The two output
+  modes cannot be combined. The same seed and arguments give the same random
+  choices.
+
+TABLES
+
+  --th CELLS           Start a table with comma-separated headings
+  --tr CELLS           Add a comma-separated row to that table
+  --table-rows ROWS    Add several semicolon-separated rows
+
+  Rows must match the number of headings. Cells are trimmed and sized to fit.
+  CSV quoting and escaping are not supported. --table-head and --table-row
+  alias --th and --tr.
+
+LISTS
+
+  --list-item TEXT     Add an item; starts a numbered list if needed
+  --numlist            Start a numbered list (also --list=numbered)
+  --bullets            Start a bullet list (also --list=bullets)
+  --list KIND          Start a numbered or bullets list
+  --list-end           Return to the parent list
+
+  Starting a list inside a list nests it. --list-end returns to the parent;
+  the next message section closes open lists.
+
+FOOTERS
+
+  --footer-N TEXT      Define footer N for a [#N] reference
+
+  References are scanned in --text and --line. Every reference needs a footer,
+  and every footer must be referenced. Backtick-quoted references are ignored.
+
+BAR CHARTS
+
+  --hbar-chart DATA    Add a horizontal ASCII bar chart
+  --vbar-chart DATA    Add a vertical ASCII bar chart
+
+  Bar charts need at least two label:value items with nonnegative integers.
+  Horizontal width defaults to 24; vertical height defaults to 6. Sizes range
+  from 1 to 256. Settings use semicolons; with settings, use data=... . float
+  accepts left, center, or right. Charts default to center.
+
+LINEAR FLOW CHARTS
+
+  --hflow-chart DATA   Add a horizontal chain of boxes
+  --vflow-chart DATA   Add a vertical chain of boxes
+
+  Flow chains need at least two comma-separated labels. Without settings,
+  pass the labels directly. With settings, use semicolons and data=... .
+  float accepts left, center, or right and defaults to center. Box labels
+  remain on one line.
+
+BRANCHING FLOWCHARTS
+
+  --flow-chart OPTIONS   Start a directed graph (requires Graphviz's dot)
+  --flow-node ID:TEXT    Add a box
+  --flow-decision ID:TEXT Add a decision diamond
+  --flow-terminal ID:TEXT Add a rounded start/end node
+  --flow-edge EDGE       Add a link, such as 'start -> done'
+
+  Use direction=vertical|horizontal and float=left|center|right. Optional
+  nodesep=N and ranksep=N control spacing (greater than zero, at most 10).
+  A graph needs at least two nodes and one edge. A different message option
+  closes the graph. Node IDs use letters, digits, or underscores and start
+  with a letter or underscore. Edges accept chains like A -> B -> C and
+  labels such as [label="yes"]. DOT is generated internally; arbitrary DOT
+  source is not accepted.
+
+SPEECH AND THOUGHT BUBBLES
+
+  --bubble OPTIONS     Add an ASCII bubble with a speaker
+
+  Clauses use name=value and are separated by semicolons:
+    phrase=TEXT         Required; the words in the bubble
+    speaker=NAME        cat, dog, or stick-figure
+    style=STYLE         speech (also voice) or thought
+    speaker-side=SIDE   below (default), left, or right
+    bubble-side=SIDE    left, center, or right relative to the speaker
+    float=SIDE          left, center, or right in the message margin
+
+  Unspecified speaker, style, bubble-side, and float values are random unless
+  set in ~/.compose-commit.toml. --rand-seed makes the choices repeatable.
+  Explicit settings always win over configured defaults.
+
+ALIASES, DEFAULTS, AND HELP
+
+  Compose options accept --option=value or --option value. Every compose
+  option also has a --compose- prefixed form, such as --compose-subject and
+  --compose-stdout. Use prefixed forms in scripts to avoid collisions with
+  future Git options.
+
+  ~/.compose-commit.toml may set wrap_width, rand_seed, bubble_speaker,
+  bubble_style, bubble_speaker_side, bubble_side, and bubble_float. CLI values
+  override them. See the README for a configuration example.
+
+  -h, --help=short     Show the quick synopsis
+  --help, --help=long  Show this guide
+  --man                Show this same guide
+  --version            Show the installed package version
+
+EXAMPLES
+
+  1. Basic commit. This runs git commit on tracked changes (--all):
+     git-compose-commit --subject 'Refresh cache' \
+       --text 'Keep cached values in sync after each write.' --all
+
+     Message:
+       Refresh cache
+
+       Keep cached values in sync after each write.
+
+  2. Preview only. --stdout prints the composed message and skips Git:
+     git-compose-commit --subject 'Refresh cache' \
+       --text 'Keep cached values in sync after each write.' --stdout
+
+     Output:
+       Refresh cache
+
+       Keep cached values in sync after each write.
+
+  3. Fields and a note:
+     git-compose-commit --subject 'Document settings' \
+       --field 'Backend:sqlite' --field 'Retries:3' \
+       --note 'Keep the old config readable.' --stdout
+
+     Output:
+       Document settings
+
+       Backend: sqlite
+       Retries: 3
+
+       Note: Keep the old config readable.
+
+  4. Table:
+     git-compose-commit --subject 'Table' --th 'Name,State' \
+       --tr 'cache,ready' --tr 'worker,waiting' --stdout
+
+     Output:
+       Table
+
+       +--------+---------+
+       | Name   | State   |
+       +--------+---------+
+       | cache  | ready   |
+       | worker | waiting |
+       +--------+---------+
+
+  5. Nested list:
+     git-compose-commit --subject 'Refresh cache safely' --numlist \
+       --list-item 'Write the new value' --bullets \
+       --list-item 'Keep readers on the old value' --list-end \
+       --list-item 'Publish the new value' --stdout
+
+     Output:
+       Refresh cache safely
+
+       1. Write the new value
+         * Keep readers on the old value
+       2. Publish the new value
+
+  6. Numbered footer:
+     git-compose-commit --subject 'Footer' \
+       --text 'Validated [#1].' --footer-1 'Using the new parser.' \
+       --stdout
+
+     Output:
+       Footer
+
+       Validated [#1].
+
+       [#1] Using the new parser.
+
+  7. Horizontal bar chart:
+     git-compose-commit --subject 'Chart' \
+       --hbar-chart 'float=left;width=10;data=tests:10,docs:5' --stdout
+
+     Output:
+       Chart
+
+       tests | ########## 10
+       docs  | ##### 5
+
+  8. Linear flow chart:
+     git-compose-commit --subject 'Flow' \
+       --hflow-chart 'float=left;data=Parse,Validate' --stdout
+
+     Output:
+       Flow
+
+       +----------+      +----------+
+       |  Parse   | --> | Validate |
+       +----------+      +----------+
+
+  9. Branching flowchart. Install Graphviz so dot is on PATH:
+     git-compose-commit --subject 'Branch' \
+       --flow-chart 'direction=horizontal;float=left' \
+       --flow-terminal 'start:Start' --flow-terminal 'done:Done' \
+       --flow-edge 'start -> done' --stdout
+
+     Output:
+       Branch
+
+       (-------)                (------)
+       ( Start )--------------->( Done )
+       (-------)                (------)
+
+  10. Speech bubble with a chosen speaker and placement:
+      git-compose-commit --subject 'Bubble' --rand-seed=1 \
+        --bubble 'speaker=cat;style=speech;phrase=Hi;bubble-side=center' \
+        --stdout
+
+      Output:
+        Bubble
+
+         .---.
+        ( Hi )
+         '---'
+          \/
+         /\_/\
+        ( o.o )
+         > ^ <
+
+  11. Thought bubble with a stick figure:
+      git-compose-commit --subject 'Consider the change' --rand-seed=1 \
+        --bubble \
+        'speaker=stick-figure;style=thought;phrase=Maybe;bubble-side=center' \
+        --stdout
+
+      Output:
+        Consider the change
+
+        ( Maybe )
+            O
+            o
+            .
+            O
+           /|\
+           / \
+
+  12. Combine paragraphs, fields, lists, and footers:
+      git-compose-commit --subject 'Validate cache writes' \
+        --text 'Check input before publishing [#1].' \
+        --field 'Result:ready' --bullets --list-item 'Parse' \
+        --list-item 'Validate' --footer-1 'Readers see only valid data.' \
+        --stdout
+
+      Output:
+        Validate cache writes
+
+        Check input before publishing [#1].
+
+        Result: ready
+
+        * Parse
+        * Validate
+
+        [#1] Readers see only valid data.

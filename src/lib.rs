@@ -240,116 +240,11 @@ struct ListEntry {
 }
 
 fn synopsis() -> &'static str {
-    "git-compose-commit - compose a Git commit message
-
-Usage: git-compose-commit [COMPOSE OPTIONS] [GIT OPTIONS] [-- PATHSPEC...]
-
-Common options: --subject, --text, --field, --note, --line, --th, --tr, --flow-chart
-Other: --version
-Use --help for the full option guide."
+    include_str!("help/short.txt").trim_end()
 }
 
 fn usage() -> &'static str {
-    "git-compose-commit - compose a Git commit message
-
-Usage: git-compose-commit [COMPOSE OPTIONS] [GIT OPTIONS] [-- PATHSPEC...]
-
-Compose options:
-  -h, --help=short     Show a concise synopsis
-  --help, --help=long  Show this detailed guide
-  --version            Show the program version
-  --rand-seed N        Seed random formatting choices
-  --subject TEXT       Set the subject; may be given once
-  --text TEXT          Add a paragraph, wrapped at the message margin
-  --field KEY:VALUE    Add an aligned key/value row
-  --note TEXT          Add a wrapped, labeled note
-  --warning TEXT       Add a wrapped, labeled warning
-  --wrap-width N       Set the message margin (default 72; range 20-256)
-  --output FILE        Write the message to FILE without running git commit
-  --detail TEXT        Add an unwrapped block, indented by four spaces
-  --line TEXT          Add one unwrapped line
-  --th CELLS           Start a table with comma-separated headings
-  --tr CELLS           Add one comma-separated row
-  --table-rows ROWS    Add rows separated by semicolons
-  --hbar-chart DATA    Add an ASCII horizontal bar chart
-  --vbar-chart DATA    Add an ASCII vertical bar chart
-  --hflow-chart DATA   Add an ASCII horizontal flow chart
-  --vflow-chart DATA   Add an ASCII vertical flow chart
-  --flow-chart OPTIONS Start a branching flowchart
-  --flow-node ID:TEXT  Add a box to the active flowchart
-  --flow-decision ID:TEXT Add a decision diamond
-  --flow-terminal ID:TEXT Add a rounded start/end node
-  --flow-edge EDGE     Add a DOT-style edge to the active flowchart
-  --bubble OPTIONS     Add an ASCII speech or thought bubble
-  --footer-N TEXT      Define the footer referenced by [#N]
-  --list-item TEXT     Add an item; starts a numbered list if needed
-  --numlist            Start a numbered list (also --list=numbered)
-  --bullets            Start a bullet list (also --list=bullets)
-  --list KIND          Start a list: numbered or bullets
-  --list-end           Close the current list and return to its parent
-
-Options may be written as --option=value or --option value. The subject is
-always first. Body sections appear in argument order, separated by blank
-lines. Footers are collected at the end in number order.
-
---wrap-width sets the global wrapping and alignment margin. It defaults to 72
-columns and accepts values from 20 to 256.
-
-The optional ~/.compose-commit.toml file sets user defaults. Command-line
-options override configured defaults. See the README for supported settings.
-
---output=FILE (also --compose-output=FILE) writes the composed message to a
-file and skips git commit. It cannot be combined with Git commit options.
-
---field=KEY:VALUE adds an aligned key/value row. Adjacent fields form one
-block. Split at the first colon; keys and values must both be non-empty.
---note and --warning add labeled prose blocks with wrapped continuation lines.
-
-Footer references are recognized in --text and --line. Every reference needs
-a footer, and every footer must be referenced. References inside backticks
-are ignored.
-
-Tables split cells on commas and rows on semicolons. CSV quoting and escaping
-are not supported. Starting a list inside an open list nests it; a new
-message section closes open lists automatically.
-
-Chart data items use label:value pairs separated by commas. With no chart
-settings, the data list may be given directly. When settings are present,
-include data=LABEL:VALUE,... as a clause. Clauses are separated by semicolons;
-supported settings are float=left|center|right, height=N for vertical charts,
-and width=N for horizontal charts. Charts are centered by default. Data needs
-at least two items.
-
-Flow chart items are comma-separated box labels, with the same optional
-float=left|center|right and data= clauses. Use --hflow-chart for a horizontal
-chain or --vflow-chart for a vertical chain. Flow charts need at least two
-boxes and do not wrap labels.
-
-For branching diagrams, --flow-chart=direction=vertical;float=center starts a
-top-to-bottom directed graph. Use direction=horizontal for a left-to-right
-branching graph. Add nodes with --flow-node=ID:TEXT,
---flow-decision=ID:TEXT, or --flow-terminal=ID:TEXT. Add links with --flow-edge='FROM -> TO'. A link
-may include a DOT label, for example --flow-edge='FROM -> TO [label=\"yes\"]';
-unlabeled chains such as A -> B -> C are also allowed. Optional nodesep=N and
-ranksep=N settings control horizontal and vertical spacing. The graph closes
-at the next non-flowchart option or end of arguments. DOT is generated
-internally; arbitrary DOT input is not accepted.
-
-Bubbles use speaker=cat|dog|stick-figure and phrase=TEXT, with optional
-style=speech|thought, speaker-side=left|right|below,
-bubble-side=left|center|right, and float=left|center|right. The speaker sits
-below the bubble by default; other omitted settings use configured defaults
-or are chosen randomly. --rand-seed
-controls all random choices made by this tool; the same arguments and seed
-produce the same output.
-
-Each compose option also accepts a --compose- prefix, including
---compose-numlist and --compose-bullets. The short table options also accept
---table-head/--table-row and --compose-th/--compose-tr. Unprefixed options
-may conflict with future Git options; use the namespaced forms in scripts.
-
-Other arguments are passed to git commit. The -- separator is passed through
-to Git and means that following arguments are pathspecs."
+    include_str!("help/long.txt").trim_end()
 }
 
 fn as_text(value: &OsStr, option: &str) -> Result<String, String> {
@@ -541,7 +436,14 @@ fn rand_seed_option(arg: &OsStr) -> Option<Option<String>> {
     split_equals(arg, "--rand-seed").or_else(|| split_equals(arg, "--compose-rand-seed"))
 }
 
-fn extract_output_option(args: Vec<OsString>) -> Result<(Option<OsString>, Vec<OsString>), String> {
+enum OutputTarget {
+    File(OsString),
+    Stdout,
+}
+
+fn extract_output_option(
+    args: Vec<OsString>,
+) -> Result<(Option<OutputTarget>, Vec<OsString>), String> {
     let mut output = None;
     let mut remaining = Vec::new();
     let mut i = 0;
@@ -554,11 +456,24 @@ fn extract_output_option(args: Vec<OsString>) -> Result<(Option<OsString>, Vec<O
             i += 1;
             continue;
         }
+        if let Some(inline) =
+            split_equals(arg, "--stdout").or_else(|| split_equals(arg, "--compose-stdout"))
+        {
+            if inline.is_some() {
+                return Err("--stdout does not take a value".into());
+            }
+            if output.is_some() {
+                return Err("--output and --stdout may only be specified once".into());
+            }
+            output = Some(OutputTarget::Stdout);
+            i += 1;
+            continue;
+        }
         let parsed =
             split_equals(arg, "--output").or_else(|| split_equals(arg, "--compose-output"));
         if let Some(inline) = parsed {
             if output.is_some() {
-                return Err("--output may only be specified once".into());
+                return Err("--output and --stdout may only be specified once".into());
             }
             let path = match inline {
                 Some(path) => OsString::from(path),
@@ -572,7 +487,7 @@ fn extract_output_option(args: Vec<OsString>) -> Result<(Option<OsString>, Vec<O
             if path.is_empty() {
                 return Err("--output requires a file path".into());
             }
-            output = Some(path);
+            output = Some(OutputTarget::File(path));
         } else {
             remaining.push(arg.clone());
         }
@@ -678,7 +593,10 @@ fn parse_args(args: Vec<OsString>, config: &ComposeConfig) -> Result<ParsedArgs,
             println!("{}", synopsis());
             std::process::exit(0);
         }
-        if arg == OsStr::new("--help") || arg == OsStr::new("--help=long") {
+        if arg == OsStr::new("--help")
+            || arg == OsStr::new("--help=long")
+            || arg == OsStr::new("--man")
+        {
             println!("{}", usage());
             std::process::exit(0);
         }
@@ -2737,18 +2655,31 @@ fn create_message_file(message: &str) -> io::Result<PathBuf> {
 }
 
 fn run_inner() -> Result<ExitCode, String> {
-    let (output_path, args) = extract_output_option(env::args_os().skip(1).collect())?;
+    let (output_target, args) = extract_output_option(env::args_os().skip(1).collect())?;
     let (message, git_args) = compose(args)?;
-    if let Some(output_path) = output_path {
+    if let Some(output_target) = output_target {
         if !git_args.is_empty() {
-            return Err("--output cannot be combined with Git commit options".into());
+            let option = match &output_target {
+                OutputTarget::File(_) => "--output",
+                OutputTarget::Stdout => "--stdout",
+            };
+            return Err(format!(
+                "{option} cannot be combined with Git commit options"
+            ));
         }
-        fs::write(&output_path, message).map_err(|error| {
-            format!(
-                "could not write {}: {error}",
-                PathBuf::from(&output_path).display()
-            )
-        })?;
+        match output_target {
+            OutputTarget::File(output_path) => {
+                fs::write(&output_path, message).map_err(|error| {
+                    format!(
+                        "could not write {}: {error}",
+                        PathBuf::from(&output_path).display()
+                    )
+                })?;
+            }
+            OutputTarget::Stdout => io::stdout()
+                .write_all(message.as_bytes())
+                .map_err(|error| format!("could not write standard output: {error}"))?,
+        }
         return Ok(ExitCode::SUCCESS);
     }
     let path = create_message_file(&message)
@@ -2783,7 +2714,7 @@ pub fn compose(args: Vec<OsString>) -> Result<(String, Vec<OsString>), String> {
         .any(|arg| {
             matches!(
                 arg.to_str(),
-                Some("-h" | "--help" | "--help=short" | "--help=long" | "--version")
+                Some("-h" | "--help" | "--help=short" | "--help=long" | "--man" | "--version")
             )
         });
     let config = if help_requested {

@@ -30,20 +30,25 @@ cargo install --path .
 ```
 
 You need Git and a Rust toolchain. `--flow-chart` also needs Graphviz, with
-its `dot` command on your `PATH` (for example, `brew install graphviz`). Use `git-compose-commit -h` (or
-`--help=short`) for a compact synopsis, and `git-compose-commit --help` (or
-`--help=long`) for the detailed option guide. Use `--version` to print the
-installed version.
+its `dot` command on your `PATH` (for example, `brew install graphviz`). Use
+`git-compose-commit -h` (or `--help=short`) for a compact synopsis, and
+`git-compose-commit --help`, `--help=long`, or `--man` for the detailed guide
+with examples and their output. Use `--version` to print the installed version.
 
-To inspect a composed message without creating a commit, use `--output FILE`.
-It writes the message and skips `git commit`:
+To preview a composed message without creating a commit, use `--stdout`:
+
+```sh
+git-compose-commit --subject 'Preview this message' --text 'No commit is made.' --stdout
+```
+
+Use `--output FILE` to write the message to a file instead:
 
 ```sh
 git-compose-commit --subject 'Preview this message' --text 'No commit is made.' --output /tmp/message.txt
 ```
 
-The namespaced form is `--compose-output`. Output mode cannot be combined
-with Git commit options.
+The namespaced forms are `--compose-stdout` and `--compose-output`. Neither
+output mode can be combined with Git commit options.
 
 ## User defaults
 
@@ -393,6 +398,7 @@ when you want to avoid that risk.
 | `--flow-terminal` | `--compose-flow-terminal` |
 | `--flow-edge` | `--compose-flow-edge` |
 | `--output` | `--compose-output` |
+| `--stdout` | `--compose-stdout` |
 | `--bubble` | `--compose-bubble` |
 | `--rand-seed` | `--compose-rand-seed` |
 | `--numlist` | `--compose-numlist` |

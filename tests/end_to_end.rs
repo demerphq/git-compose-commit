@@ -199,8 +199,11 @@ fn help_switches_between_synopsis_and_detailed_guide() {
     assert!(short.status.success());
     let short = String::from_utf8(short.stdout).expect("help output is UTF-8");
     assert!(short.contains("Usage: git-compose-commit"));
-    assert!(short.contains("Use --help for the full option guide."));
+    assert!(short.contains("Create a commit:"));
+    assert!(short.contains("Preview without committing:"));
+    assert!(short.contains("Use --help or --man for examples"));
     assert!(!short.contains("--footer-N TEXT"));
+    assert!(short.lines().all(|line| line.len() <= 80));
 
     let detailed = run_composer(repo.path(), &["--help"]);
     assert!(detailed.status.success());
@@ -220,11 +223,28 @@ fn help_switches_between_synopsis_and_detailed_guide() {
     assert!(detailed.contains("--warning TEXT"));
     assert!(detailed.contains("--wrap-width N"));
     assert!(detailed.contains("CSV quoting and escaping"));
+    assert!(detailed.contains("HOW IT WORKS"));
+    assert!(detailed.contains("EXAMPLES"));
+    assert!(detailed.contains("TABLES\n"));
+    assert!(detailed.contains("LISTS\n"));
+    assert!(detailed.contains("FOOTERS\n"));
+    assert!(detailed.contains("BRANCHING FLOWCHARTS"));
+    assert!(detailed.contains("SPEECH AND THOUGHT BUBBLES"));
+    assert!(detailed.contains("speaker-side=SIDE   below (default)"));
+    assert!(detailed.contains("--output /dev/stdout"));
+    assert!(detailed.contains("--stdout"));
+    assert!(detailed.contains("Backend: sqlite"));
+    assert!(detailed.contains("( Start )--------------->( Done )"));
+    assert!(detailed.lines().all(|line| line.len() <= 80));
 
     let forced_short = run_composer(repo.path(), &["--help=short"]);
     assert!(String::from_utf8_lossy(&forced_short.stdout).contains("Use --help"));
     let forced_long = run_composer(repo.path(), &["--help=long"]);
     assert!(String::from_utf8_lossy(&forced_long.stdout).contains("--table-rows ROWS"));
+    assert_eq!(forced_long.stdout, detailed.as_bytes());
+    let man = run_composer(repo.path(), &["--man"]);
+    assert!(man.status.success());
+    assert_eq!(man.stdout, detailed.as_bytes());
 
     let version = run_composer(repo.path(), &["--version"]);
     assert!(version.status.success());
@@ -431,4 +451,42 @@ fn output_mode_rejects_git_commit_options() {
     assert!(String::from_utf8_lossy(&output.stderr)
         .contains("--output cannot be combined with Git commit options"));
     assert!(!output_path.exists());
+}
+
+#[test]
+fn stdout_mode_prints_without_committing_and_rejects_git_options() {
+    let repo = TestRepo::new();
+    for option in ["--stdout", "--compose-stdout"] {
+        let output = run_composer(
+            repo.path(),
+            &["--subject=Preview", "--text=No commit is made.", option],
+        );
+        assert!(output.status.success());
+        assert_eq!(output.stdout, b"Preview\n\nNo commit is made.\n");
+        assert!(output.stderr.is_empty());
+    }
+
+    let output = run_composer(repo.path(), &["--subject=Preview", "--stdout", "--all"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr)
+        .contains("--stdout cannot be combined with Git commit options"));
+
+    let output = run_composer(
+        repo.path(),
+        &["--subject=Preview", "--stdout", "--output=preview.txt"],
+    );
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr)
+        .contains("--output and --stdout may only be specified once"));
+
+    let output = run_composer(repo.path(), &["--subject=Preview", "--stdout=true"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("--stdout does not take a value"));
+
+    let head = Command::new("git")
+        .args(["rev-parse", "--verify", "HEAD"])
+        .current_dir(repo.path())
+        .output()
+        .expect("check that stdout mode did not create a commit");
+    assert!(!head.status.success());
 }
