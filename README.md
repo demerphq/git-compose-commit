@@ -62,9 +62,10 @@ bubble_side = "center"
 bubble_float = "center"
 ```
 
-Every setting is optional. Without a configured bubble default or explicit
-bubble clause, that choice remains random. `rand_seed` seeds any random
-choices the tool makes; `--rand-seed` overrides it for one invocation.
+Every setting is optional. The speaker sits below the bubble by default.
+Without a configured bubble default or explicit bubble clause, other choices
+remain random. `rand_seed` seeds any random choices the tool makes;
+`--rand-seed` overrides it for one invocation.
 Supported bubble values are the same as the `speaker`, `style`,
 `speaker-side`, `bubble-side`, and `float` clauses accepted by `--bubble`.
 Unknown settings and invalid values in the config file are errors.
@@ -271,12 +272,13 @@ contain spaces; separate clauses with semicolons:
 
 Choose `speaker=cat`, `speaker=dog`, or `speaker=stick-figure`. The style
 may be `voice` (also `speech`) or `thought`. `speaker-side=left|right` puts the
-avatar beside the bubble; `below` places it underneath. For an avatar below,
-`bubble-side=left|center|right` positions the bubble relative to it. `float`
-aligns the entire composition within the message and accepts `left`, `center`,
-or `right`. Any omitted bubble settings are chosen randomly unless configured
-in `~/.compose-commit.toml`; specify settings when you want to choose their
-exact values. Phrases wrap to fit the message margin.
+avatar beside the bubble; `below` (the default) places it underneath. For an
+avatar below, `bubble-side=left|center|right` positions the bubble relative
+to it, with the speaker toward the opposite edge. `float` aligns the entire
+composition within the message and accepts `left`, `center`, or `right`.
+Other omitted bubble settings are chosen randomly unless configured in
+`~/.compose-commit.toml`; specify settings to choose their exact values.
+Phrases wrap to fit the message margin.
 
 Use `--rand-seed=N` to control all random choices made by the tool, including
 bubble defaults. The namespaced alias is `--compose-rand-seed=N`. The same seed
@@ -402,7 +404,17 @@ when you want to avoid that risk.
 
 ## Tests
 
-Run the suite with `cargo test`:
+Install Graphviz so its `dot` command is on `PATH`, then run the same checks
+as CI:
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --all-targets --locked -- -D warnings
+cargo test --locked
+RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --locked
+```
+
+The test suite includes:
 
 - `src/tests/mod.rs` has unit tests for parsing and formatting.
 - `tests/end_to_end.rs` runs the executable in temporary Git repositories

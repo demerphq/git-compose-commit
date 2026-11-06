@@ -336,7 +336,7 @@ fn renders_speech_and_thought_bubbles_with_each_speaker() {
             "( Mooooo )\n",
             " '-------'\n",
             "    /\n",
-            "   /\n",
+            "    /\n",
             "  /\\_/\\\n",
             " ( o.o )\n",
             "  > ^ <\n",
@@ -371,15 +371,66 @@ fn bubble_speaker_can_sit_to_either_side() {
     assert_eq!(
         message(&["--bubble=speaker=cat;style=voice;phrase=Hi;speaker-side=left;bubble-side=center;float=left"]),
         concat!(
-            " /\\_/\\       .---.\n",
+            " /\\_/\\         .---.\n",
             "( o.o ) <-- ( Hi )\n",
-            " > ^ <       '---'\n",
+            " > ^ <         '---'\n",
         )
     );
     assert!(
         message(&["--bubble=speaker=cat;style=voice;phrase=Hi;speaker-side=right;bubble-side=center;float=left"])
             .contains("( Hi ) --> ( o.o )")
     );
+}
+
+#[test]
+fn multiline_bubble_keeps_right_hand_avatar_in_one_column() {
+    let rendered = message(&[
+        "--wrap-width=30",
+        "--bubble=speaker=cat;style=thought;speaker-side=right;phrase=hello world there;float=left",
+    ]);
+    let lines = rendered.lines().collect::<Vec<_>>();
+    let head = lines.iter().find(|line| line.contains("/\\_/\\")).unwrap();
+    let face = lines.iter().find(|line| line.contains("( o.o )")).unwrap();
+    let feet = lines.iter().find(|line| line.contains("> ^ <")).unwrap();
+    assert_eq!(
+        head.find("/\\_/\\").unwrap() - 1,
+        face.find("( o.o )").unwrap()
+    );
+    assert_eq!(
+        feet.find("> ^ <").unwrap() - 1,
+        face.find("( o.o )").unwrap()
+    );
+}
+
+#[test]
+fn bubble_defaults_above_speaker_and_fits_message_margin() {
+    let phrase = "You can't make things up and expect the computer to understand what you mean!";
+    for speaker in ["cat", "dog", "stick-figure"] {
+        for style in ["voice", "thought"] {
+            for side in ["left", "center", "right"] {
+                for alignment in ["left", "center", "right"] {
+                    let rendered = message(&[format!(
+                        "--bubble=speaker={speaker};style={style};bubble-side={side};float={alignment};phrase={phrase}"
+                    )
+                    .as_str()]);
+                    let avatar = bubble_avatar(match speaker {
+                        "cat" => BubbleSpeaker::Cat,
+                        "dog" => BubbleSpeaker::Dog,
+                        _ => BubbleSpeaker::StickFigure,
+                    });
+                    let phrase_row = rendered.find("You can't").unwrap();
+                    let avatar_row = rendered.rfind(avatar[0]).unwrap();
+                    assert!(phrase_row < avatar_row, "{rendered}");
+                    assert!(
+                        rendered
+                            .lines()
+                            .all(|line| line.chars().count() <= WRAP_WIDTH),
+                        "{speaker} {style} {side} {alignment}: {rendered}"
+                    );
+                }
+            }
+        }
+    }
 }
 
 #[test]
