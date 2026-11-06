@@ -635,19 +635,16 @@ fn extract_rand_seed(args: &[OsString]) -> Result<Option<u64>, String> {
     Ok(seed)
 }
 
-fn parse_args(
-    args: Vec<OsString>,
-    config: &ComposeConfig,
-) -> Result<
-    (
-        Option<String>,
-        Vec<Section>,
-        BTreeMap<usize, String>,
-        usize,
-        Vec<OsString>,
-    ),
-    String,
-> {
+/// Everything [`parse_args`] extracts from the command line.
+struct ParsedArgs {
+    subject: Option<String>,
+    sections: Vec<Section>,
+    footers: BTreeMap<usize, String>,
+    wrap_width: usize,
+    git_args: Vec<OsString>,
+}
+
+fn parse_args(args: Vec<OsString>, config: &ComposeConfig) -> Result<ParsedArgs, String> {
     let mut bubble_rng = BubbleRng::new(extract_rand_seed(&args)?.or(config.rand_seed));
     let mut subject = None;
     let mut sections = Vec::new();
@@ -710,7 +707,7 @@ fn parse_args(
                         .strip_prefix("--footer-")
                         .map(|suffix| (suffix, "--footer"))
                 })?;
-            (|| {
+            {
                 let (number, inline) = match suffix.split_once('=') {
                     Some((number, value)) => (number, Some(value.to_owned())),
                     None => (suffix, None),
@@ -723,7 +720,7 @@ fn parse_args(
                         .ok()
                         .map(|number| (number, inline, option_prefix))
                 }
-            })()
+            }
         });
         if let Some((number, inline, option_prefix)) = dynamic_footer {
             active_flow_diagram = None;
@@ -1054,7 +1051,13 @@ fn parse_args(
             i += 1;
         }
     }
-    Ok((subject, sections, footers, wrap_width, git_args))
+    Ok(ParsedArgs {
+        subject,
+        sections,
+        footers,
+        wrap_width,
+        git_args,
+    })
 }
 
 #[cfg(test)]
@@ -2167,7 +2170,7 @@ fn format_flow_chart(chart: &FlowChart, wrap_width: usize) -> String {
         ChartOrientation::Horizontal => {
             let boxes = chart.steps.iter().map(|step| render_box(step));
             let boxes = boxes.collect::<Vec<_>>();
-            vec![
+            [
                 boxes
                     .iter()
                     .map(|(top, _, _)| top.as_str())
@@ -2620,12 +2623,15 @@ fn format_message(
         };
         parts.push(formatted);
     }
-    for number in references.difference(&footers.keys().copied().collect()) {
+    if let Some(number) = references
+        .iter()
+        .find(|number| !footers.contains_key(number))
+    {
         return Err(format!(
             "reference [#{number}] has no matching --compose-footer-{number}"
         ));
     }
-    for number in footers.keys().filter(|number| !references.contains(number)) {
+    if let Some(number) = footers.keys().find(|number| !references.contains(number)) {
         return Err(format!(
             "--compose-footer-{number} has no matching [#{number}] reference"
         ));
@@ -2712,8 +2718,10 @@ fn format_flow_diagram(diagram: &FlowDiagram, wrap_width: usize) -> Result<Strin
     {
         rendered
     } else {
-        let mut options = hascii::RenderOptions::default();
-        options.border_mode = hascii::BorderMode::Plain;
+        let options = hascii::RenderOptions {
+            border_mode: hascii::BorderMode::Plain,
+            ..Default::default()
+        };
         hascii::render(&dot, &options)
             .map_err(|error| format!("could not render --flow-chart: {error}"))?
     };
@@ -2804,7 +2812,13 @@ pub fn compose(args: Vec<OsString>) -> Result<(String, Vec<OsString>), String> {
     } else {
         load_user_config()?
     };
-    let (subject, sections, footers, wrap_width, git_args) = parse_args(args, &config)?;
+    let ParsedArgs {
+        subject,
+        sections,
+        footers,
+        wrap_width,
+        git_args,
+    } = parse_args(args, &config)?;
     let message = format_message(subject, sections, footers, wrap_width)?;
     Ok((message, git_args))
 }
