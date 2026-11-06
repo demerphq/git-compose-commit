@@ -2209,10 +2209,19 @@ fn format_bubble(bubble: &Bubble, wrap_width: usize) -> String {
         .map(|line| line.chars().count())
         .max()
         .unwrap_or(0);
+    let head_anchor = match bubble.speaker {
+        BubbleSpeaker::Cat => 3,
+        BubbleSpeaker::Dog => 4,
+        BubbleSpeaker::StickFigure => 2,
+    };
     // Leave room for the frame and either the horizontal connector/avatar or
-    // the offset between a bubble and a speaker below it.
+    // the part of an avatar that extends beyond a bubble above it.
     let reserved_width = match bubble.speaker_side {
-        SpeakerSide::Below => 8,
+        SpeakerSide::Below => match bubble.bubble_side {
+            BubbleSide::Left => 4 + avatar_width.saturating_sub(head_anchor + 1),
+            BubbleSide::Center => 4,
+            BubbleSide::Right => 4 + head_anchor.saturating_sub(1),
+        },
         SpeakerSide::Left | SpeakerSide::Right => avatar_width + 11,
     };
     let phrase_lines = wrap_paragraph_at(&bubble.phrase, wrap_width.saturating_sub(reserved_width));
@@ -2243,35 +2252,33 @@ fn format_bubble(bubble: &Bubble, wrap_width: usize) -> String {
     let bubble_width = phrase_width + 4;
     let rendered = match bubble.speaker_side {
         SpeakerSide::Below => {
-            let offset = if bubble.bubble_side == BubbleSide::Center {
-                0
+            let bubble_anchor = match bubble.bubble_side {
+                BubbleSide::Left => bubble_width - 1,
+                BubbleSide::Center => bubble_width / 2,
+                BubbleSide::Right => 1,
+            };
+            let (bubble_x, avatar_x) = if head_anchor >= bubble_anchor {
+                (head_anchor - bubble_anchor, 0)
             } else {
-                4
+                (0, bubble_anchor - head_anchor)
             };
-            let canvas_width = bubble_width.max(avatar_width) + offset;
-            let (bubble_x, avatar_x) = match bubble.bubble_side {
-                BubbleSide::Center => (
-                    (canvas_width - bubble_width) / 2,
-                    (canvas_width - avatar_width) / 2,
-                ),
-                BubbleSide::Left => (0, canvas_width - avatar_width),
-                BubbleSide::Right => (canvas_width - bubble_width, 0),
-            };
+            let canvas_width = (bubble_x + bubble_width).max(avatar_x + avatar_width);
             let mut output = lines
                 .iter()
                 .map(|line| format!("{}{line}", " ".repeat(bubble_x)))
                 .collect::<Vec<_>>();
-            let speaker_center = avatar_x + avatar_width / 2;
-            let base_x = speaker_center.clamp(bubble_x + 2, bubble_x + bubble_width - 3);
+            let head_x = avatar_x + head_anchor;
             match bubble.style {
                 BubbleStyle::Speech => {
-                    output.push(format!("{}\\/", " ".repeat(base_x.saturating_sub(1))));
+                    let mark = match bubble.bubble_side {
+                        BubbleSide::Right => '/',
+                        BubbleSide::Left | BubbleSide::Center => '\\',
+                    };
+                    output.push(place_bubble_mark(canvas_width, head_x, mark));
                 }
                 BubbleStyle::Thought => {
-                    for (step, mark) in ['O', 'o', '.'].into_iter().enumerate() {
-                        let x = base_x as isize
-                            + (speaker_center as isize - base_x as isize) * (step as isize + 1) / 4;
-                        output.push(place_bubble_mark(canvas_width, x as usize, mark));
+                    for mark in ['O', 'o', '.'] {
+                        output.push(place_bubble_mark(canvas_width, head_x, mark));
                     }
                 }
             }

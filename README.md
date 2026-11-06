@@ -279,6 +279,28 @@ contain spaces; separate clauses with semicolons:
 --bubble='speaker=stick-figure;style=thought;phrase=Maybe'
 ```
 
+For a speech bubble above the cat:
+
+```sh
+git-compose-commit --subject 'A quick note' \
+  --bubble 'speaker=cat;style=speech;phrase=Hi;speaker-side=below;bubble-side=center;float=left' \
+  --stdout
+```
+
+Output:
+
+```text
+A quick note
+
+ .---.
+( Hi )
+ '---'
+   \
+ /\_/\
+( o.o )
+ > ^ <
+```
+
 Choose `speaker=cat`, `speaker=dog`, or `speaker=stick-figure`. The style
 may be `voice` (also `speech`) or `thought`. `speaker-side=left|right` puts the
 avatar beside the bubble; `below` (the default) places it underneath. For an
@@ -287,7 +309,8 @@ to it, with the speaker toward the opposite edge. `float` aligns the entire
 composition within the message and accepts `left`, `center`, or `right`.
 Other omitted bubble settings are chosen randomly unless configured in
 `~/.compose-commit.toml`; specify settings to choose their exact values.
-Phrases wrap to fit the message margin.
+Phrases wrap to fit the message margin. Above the speaker, speech bubbles use
+one `\` or `/` pointer aimed at the speaker's head; thought bubbles use dots.
 
 Use `--rand-seed=N` to control all random choices made by the tool, including
 bubble defaults. The namespaced alias is `--compose-rand-seed=N`. The same seed

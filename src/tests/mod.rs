@@ -352,10 +352,10 @@ fn renders_speech_and_thought_bubbles_with_each_speaker() {
             " .-------.\n",
             "( Mooooo )\n",
             " '-------'\n",
-            "   \\/\n",
-            "  /\\_/\\\n",
-            " ( o.o )\n",
-            "  > ^ <\n",
+            "     \\\n",
+            "   /\\_/\\\n",
+            "  ( o.o )\n",
+            "   > ^ <\n",
         )
     );
     let dog = message(&["--bubble=speaker=dog;style=voice;phrase=Mooooo;float=left"]);
@@ -468,14 +468,49 @@ fn bubble_defaults_above_speaker_and_fits_message_margin() {
 }
 
 #[test]
+fn below_bubbles_fit_a_narrow_message_margin() {
+    for speaker in ["cat", "dog", "stick-figure"] {
+        for side in ["left", "center", "right"] {
+            for style in ["speech", "thought"] {
+                let rendered = message(&[
+                    "--wrap-width=20",
+                    format!(
+                        "--bubble=speaker={speaker};style={style};phrase=one two three four five six;bubble-side={side};float=left"
+                    )
+                    .as_str(),
+                ]);
+                assert!(
+                    rendered.lines().all(|line| line.chars().count() <= 20),
+                    "{speaker} {side} {style}: {rendered}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn speech_bubble_has_one_pointer_below_the_frame() {
     let rendered = message(&[
         "--bubble=speaker=dog;style=voice;speaker-side=below;bubble-side=left;float=left;phrase=You can't make things up and expect the computer to understand what you mean!",
     ]);
     let lines = rendered.lines().collect::<Vec<_>>();
     let frame_bottom = lines.iter().position(|line| line.contains("'---")).unwrap();
-    assert_eq!(lines[frame_bottom + 1].trim(), "\\/");
+    assert_eq!(lines[frame_bottom + 1].trim(), "\\");
     assert!(lines[frame_bottom + 2].contains("/ \\__"));
+}
+
+#[test]
+fn speech_pointer_aims_at_the_speakers_head() {
+    for (side, mark) in [("left", '\\'), ("center", '\\'), ("right", '/')] {
+        let rendered = message(&[format!(
+            "--bubble=speaker=cat;style=speech;phrase=Hi;speaker-side=below;bubble-side={side};float=left"
+        )
+        .as_str()]);
+        let lines = rendered.lines().collect::<Vec<_>>();
+        let pointer = lines.iter().find(|line| line.contains(mark)).unwrap();
+        let face = lines.iter().find(|line| line.contains("( o.o )")).unwrap();
+        assert_eq!(pointer.find(mark), face.find('.'), "{side}: {rendered}");
+    }
 }
 
 #[test]
@@ -489,9 +524,23 @@ fn bubble_side_shifts_the_bubble_over_the_speaker() {
     let right = message(&[
         "--bubble=speaker=stick-figure;style=voice;phrase=Hi;speaker-side=below;bubble-side=right;float=left",
     ]);
-    assert!(left.contains("      O\n"));
-    assert!(center.contains("   O\n"));
-    assert!(right.contains("  O\n"));
+    let offset = |rendered: &str| {
+        let bubble_x = rendered
+            .lines()
+            .find(|line| line.contains("( Hi )"))
+            .unwrap()
+            .find('(')
+            .unwrap();
+        let head_x = rendered
+            .lines()
+            .find(|line| line.trim() == "O")
+            .unwrap()
+            .find('O')
+            .unwrap();
+        bubble_x as isize - head_x as isize
+    };
+    assert!(offset(&left) < offset(&center));
+    assert!(offset(&center) < offset(&right));
 }
 
 #[test]

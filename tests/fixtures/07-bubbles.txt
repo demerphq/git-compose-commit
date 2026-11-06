@@ -10,10 +10,10 @@ Illustrate the speakers
 ( o.o ) <-- ( Mooooo )
  > ^ <       '-------'
 
-  ( Hmm )
-      O
-      o
-      .
+ ( Hmm )
+    O
+    o
+    .
  / \__
 (    @\___
  /         O

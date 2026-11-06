@@ -113,7 +113,8 @@ SPEECH AND THOUGHT BUBBLES
 
   Unspecified speaker, style, bubble-side, and float values are random unless
   set in ~/.compose-commit.toml. --rand-seed makes the choices repeatable.
-  Explicit settings always win over configured defaults.
+  Explicit settings always win over configured defaults. Speech bubbles above
+  a speaker use one slash aimed at the head; thought bubbles use dots.
 
 ALIASES, DEFAULTS, AND HELP
 
@@ -251,7 +252,7 @@ EXAMPLES
          .---.
         ( Hi )
          '---'
-          \/
+           \
          /\_/\
         ( o.o )
          > ^ <
