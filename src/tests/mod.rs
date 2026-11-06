@@ -166,6 +166,167 @@ fn flowchart_nodes_get_ascii_shapes_and_edges_stay_ascii() {
     assert_eq!(to_ascii_diagram("┌─┐\n│▼│\n└─┘"), "+-+\n|v|\n+-+");
 }
 
+fn layout_graph(
+    nodes: &[(&str, &str, f64, f64)],
+    edges: &[(usize, usize, Option<&str>)],
+) -> hascii::model::LayoutGraph {
+    use hascii::model::{BBox, Edge, LayoutGraph, Node, NodeShape, Point, RankDir};
+    LayoutGraph {
+        bb: BBox {
+            x_min: 0.0,
+            y_min: 0.0,
+            x_max: 200.0,
+            y_max: 500.0,
+        },
+        nodes: nodes
+            .iter()
+            .enumerate()
+            .map(|(gvid, (name, label, x, y))| Node {
+                gvid,
+                name: (*name).into(),
+                label: (*label).into(),
+                center: Point { x: *x, y: *y },
+                width_pts: 60.0,
+                height_pts: 36.0,
+                shape: NodeShape::Box,
+                fillcolor: None,
+            })
+            .collect(),
+        edges: edges
+            .iter()
+            .enumerate()
+            .map(|(gvid, (tail_idx, head_idx, label))| Edge {
+                gvid,
+                tail_idx: *tail_idx,
+                head_idx: *head_idx,
+                label: label.map(|label| format!(" {label} ")),
+                label_pos: None,
+                arrow_end: None,
+                arrow_start: None,
+                control_points: Vec::new(),
+            })
+            .collect(),
+        subgraphs: Vec::new(),
+        rankdir: RankDir::TB,
+    }
+}
+
+#[test]
+fn vertical_flowchart_layout_ignores_graphviz_coordinate_drift() {
+    let edges = [
+        (0, 1, None),
+        (1, 2, None),
+        (2, 3, Some("yes")),
+        (2, 4, Some("no")),
+        (3, 5, None),
+        (4, 5, None),
+    ];
+    // node centres as reported by graphviz 16.1.0, in points
+    let graphviz_16 = layout_graph(
+        &[
+            ("start", "Start", 89.0, 469.5),
+            ("read", "Read input", 89.0, 360.5),
+            ("valid", "Valid?", 89.0, 251.5),
+            ("save", "Save", 27.0, 127.0),
+            ("reject", "Report error", 153.0, 127.0),
+            ("done", "Done", 89.0, 18.0),
+        ],
+        &edges,
+    );
+    // the same ranks and ordering with the drifted spacing of another release
+    let drifted = layout_graph(
+        &[
+            ("start", "Start", 80.0, 430.0),
+            ("read", "Read input", 80.0, 330.0),
+            ("valid", "Valid?", 80.0, 210.0),
+            ("save", "Save", 30.0, 110.0),
+            ("reject", "Report error", 141.0, 110.0),
+            ("done", "Done", 85.0, 20.0),
+        ],
+        &edges,
+    );
+
+    let rendered = render_vertical_layout(&graphviz_16, 0.8, 1.0).expect("layered graph");
+    assert_eq!(
+        render_vertical_layout(&drifted, 0.8, 1.0).as_deref(),
+        Some(rendered.as_str())
+    );
+
+    let rendered = to_ascii_diagram(&rendered);
+    let lines = rendered.lines().collect::<Vec<_>>();
+    let fork = lines
+        .iter()
+        .position(|line| line.contains("| yes"))
+        .expect("labelled branch");
+    assert_eq!(lines[fork - 1], "    +---------+---------+");
+    assert_eq!(lines[fork], "    | yes               | no");
+    assert_eq!(
+        lines
+            .iter()
+            .filter(|line| **line == "    +---------+---------+")
+            .count(),
+        2,
+        "fork and merge should be symmetric"
+    );
+}
+
+#[test]
+fn horizontal_flowchart_layout_ignores_graphviz_coordinate_drift() {
+    let edges = [
+        (0, 1, None),
+        (1, 2, Some("yes")),
+        (1, 3, Some("no")),
+        (2, 4, None),
+        (3, 4, None),
+    ];
+    let mut graph = layout_graph(
+        &[
+            ("start", "Start", 27.0, 72.0),
+            ("valid", "Valid?", 130.0, 72.0),
+            ("save", "Save", 260.0, 126.0),
+            ("reject", "Report error", 260.0, 18.0),
+            ("done", "Done", 380.0, 72.0),
+        ],
+        &edges,
+    );
+    graph.rankdir = hascii::model::RankDir::LR;
+    let mut drifted = layout_graph(
+        &[
+            ("start", "Start", 30.0, 80.0),
+            ("valid", "Valid?", 150.0, 75.0),
+            ("save", "Save", 300.0, 140.0),
+            ("reject", "Report error", 300.0, 10.0),
+            ("done", "Done", 420.0, 70.0),
+        ],
+        &edges,
+    );
+    drifted.rankdir = hascii::model::RankDir::LR;
+
+    let rendered = render_horizontal_layout(&graph, 0.5, 0.5);
+    assert_eq!(render_horizontal_layout(&drifted, 0.5, 0.5), rendered);
+    let rendered = to_ascii_diagram(&rendered);
+    let rows = rendered.lines().collect::<Vec<_>>();
+    let row_of = |label: &str| rows.iter().position(|row| row.contains(label)).unwrap();
+    assert_eq!(
+        row_of("Valid?") - row_of("Save"),
+        row_of("Report error") - row_of("Valid?"),
+        "branches should sit symmetrically about the decision"
+    );
+}
+
+#[test]
+fn vertical_flowchart_layout_declines_rank_skipping_edges() {
+    let graph = layout_graph(
+        &[
+            ("a", "A", 50.0, 300.0),
+            ("b", "B", 20.0, 200.0),
+            ("c", "C", 50.0, 100.0),
+        ],
+        &[(0, 1, None), (1, 2, None), (0, 2, None)],
+    );
+    assert_eq!(render_vertical_layout(&graph, 0.8, 1.0), None);
+}
+
 #[test]
 fn renders_speech_and_thought_bubbles_with_each_speaker() {
     assert_eq!(

@@ -29,7 +29,8 @@ From the project directory, install the executable with Cargo:
 cargo install --path .
 ```
 
-You need Git and a Rust toolchain. Use `git-compose-commit -h` (or
+You need Git and a Rust toolchain. `--flow-chart` also needs Graphviz, with
+its `dot` command on your `PATH` (for example, `brew install graphviz`). Use `git-compose-commit -h` (or
 `--help=short`) for a compact synopsis, and `git-compose-commit --help` (or
 `--help=long`) for the detailed option guide. Use `--version` to print the
 installed version.
@@ -249,7 +250,11 @@ wrapper generates DOT internally; arbitrary DOT source is not accepted. Set
 defaults to vertical, float defaults to center, and spacing defaults are 0.8
 and 1.0. A graph needs at least two declared nodes and one edge. Nested graphs
 are not supported. Branching diagrams are laid out with Graphviz, which must
-be installed and available as `dot`.
+be installed and available as `dot`. Only Graphviz's choice of rank and
+ordering for each node is used; spacing and edge routing are computed by
+`git-compose-commit`, so a diagram renders the same with any Graphviz release.
+A graph with an edge that skips a rank or points back up falls back to
+Graphviz's own positions, which can vary between releases.
 In horizontal graphs, branches from one node align their turn columns. If
 their labels differ, they take separate paths; edges merging into one node
 share a vertical column.

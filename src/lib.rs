@@ -1500,23 +1500,39 @@ fn style_flow_nodes(rendered: &str, nodes: &[FlowNode]) -> String {
         .join("\n")
 }
 
-fn render_horizontal_dot(dot: &str) -> Result<String, String> {
-    let graph = hascii::graphviz::layout(dot)
-        .map_err(|error| format!("could not lay out --flow-chart: {error}"))?;
+/// Draw a left-to-right flowchart. Nodes come from [`place_flow_nodes`] so the
+/// drawing does not depend on graphviz coordinates; graphs it cannot place
+/// fall back to graphviz's scaled positions.
+fn render_horizontal_layout(
+    graph: &hascii::model::LayoutGraph,
+    node_sep: f64,
+    rank_sep: f64,
+) -> String {
     let labels = graph
         .nodes
         .iter()
         .map(|node| node.label.clone())
         .collect::<Vec<_>>();
     let scale = hascii::scale::ScaleParams::compute(&graph.bb, &graph.nodes, &labels);
-    let rects = graph
-        .nodes
-        .iter()
-        .zip(&labels)
-        .map(|(node, label)| scale.node_rect(node, label))
-        .collect::<Vec<_>>();
-    let mut grid = hascii::grid::CharGrid::new(scale.grid_w, scale.grid_h);
-    hascii::render_nodes::render_nodes(&mut grid, &graph.nodes, &labels, &scale, true);
+    let placement = place_flow_nodes(graph, true, node_sep, rank_sep);
+    let (rects, mut grid, placed) = match placement {
+        Some(placement) => {
+            let mut grid = hascii::grid::CharGrid::new(placement.width, placement.height);
+            draw_flow_boxes(&mut grid, &placement.rects, &graph.nodes);
+            (placement.rects, grid, true)
+        }
+        None => {
+            let rects = graph
+                .nodes
+                .iter()
+                .zip(&labels)
+                .map(|(node, label)| scale.node_rect(node, label))
+                .collect::<Vec<_>>();
+            let mut grid = hascii::grid::CharGrid::new(scale.grid_w, scale.grid_h);
+            hascii::render_nodes::render_nodes(&mut grid, &graph.nodes, &labels, &scale, true);
+            (rects, grid, false)
+        }
+    };
 
     let mut outgoing = vec![Vec::new(); graph.nodes.len()];
     let mut incoming = vec![Vec::new(); graph.nodes.len()];
@@ -1610,6 +1626,10 @@ fn render_horizontal_dot(dot: &str) -> Result<String, String> {
                     start.0.saturating_sub(1)
                 };
                 draw_edge_label(&mut grid, label_row, turn_col + 1, label.trim());
+            } else if placed {
+                // graphviz label positions do not match placed nodes; write
+                // the label into the edge where it leaves its source.
+                draw_edge_label(&mut grid, start.0, start_col + 1, label.trim());
             } else if let Some(label_pos) = &edge.label_pos {
                 let (row, center_col) = scale.to_grid(label_pos);
                 let chars = label.chars().collect::<Vec<_>>();
@@ -1620,7 +1640,297 @@ fn render_horizontal_dot(dot: &str) -> Result<String, String> {
             }
         }
     }
-    Ok(grid.render())
+    grid.render()
+}
+
+/// Grid rectangles for every flowchart node plus the grid size they need.
+struct FlowPlacement {
+    rects: Vec<hascii::scale::GridRect>,
+    width: usize,
+    height: usize,
+}
+
+/// Place flowchart nodes on a character grid using only the rank and in-rank
+/// order graphviz assigns, never its coordinates, so drawings stay identical
+/// across graphviz releases whose spacing and spline routing differ. Each node
+/// is centred on its parents and nodes sharing a rank are pushed apart in
+/// graphviz order.
+///
+/// Returns `None` when an edge does not connect adjacent ranks (rank-skipping
+/// or back edges), leaving those graphs to graphviz coordinates.
+fn place_flow_nodes(
+    graph: &hascii::model::LayoutGraph,
+    horizontal: bool,
+    node_sep: f64,
+    rank_sep: f64,
+) -> Option<FlowPlacement> {
+    const NODE_HEIGHT: i64 = 3;
+    let count = graph.nodes.len();
+    if count == 0 {
+        return None;
+    }
+    // graphviz puts every node of a rank on one line: the same y top-to-bottom
+    // (larger y nearer the top), the same x left-to-right.
+    let rank_key = |index: usize| {
+        let center = graph.nodes[index].center;
+        if horizontal {
+            center.x.round() as i64
+        } else {
+            -(center.y.round() as i64)
+        }
+    };
+    let order_key = |index: usize| {
+        let center = graph.nodes[index].center;
+        if horizontal {
+            -center.y
+        } else {
+            center.x
+        }
+    };
+    let mut rank_keys = (0..count).map(rank_key).collect::<Vec<_>>();
+    rank_keys.sort_unstable();
+    rank_keys.dedup();
+    let rank_of = (0..count)
+        .map(|index| rank_keys.binary_search(&rank_key(index)).ok())
+        .collect::<Option<Vec<_>>>()?;
+    if graph
+        .edges
+        .iter()
+        .any(|edge| rank_of[edge.head_idx] != rank_of[edge.tail_idx] + 1)
+    {
+        return None;
+    }
+    let mut ranks = vec![Vec::new(); rank_keys.len()];
+    for index in 0..count {
+        ranks[rank_of[index]].push(index);
+    }
+    for rank in &mut ranks {
+        rank.sort_by(|&a, &b| order_key(a).total_cmp(&order_key(b)));
+    }
+
+    let widths = graph
+        .nodes
+        .iter()
+        .map(|node| node.label.trim().chars().count() as i64 + 4)
+        .collect::<Vec<_>>();
+    let cross_size = |index: usize| {
+        if horizontal {
+            NODE_HEIGHT
+        } else {
+            widths[index]
+        }
+    };
+    let cross_gap = if horizontal {
+        ((node_sep * 4.0).round() as i64).max(1)
+    } else {
+        ((node_sep * 10.0).round() as i64).max(2)
+    };
+    let mut parents = vec![Vec::new(); count];
+    for edge in &graph.edges {
+        parents[edge.head_idx].push(edge.tail_idx);
+    }
+
+    // centre each node on its parents, push apart in graphviz order, then
+    // shift the rank back so it sits where its nodes asked to be.
+    let mut centers = vec![0i64; count];
+    for rank in &ranks {
+        let wanted = rank
+            .iter()
+            .map(|&index| {
+                (!parents[index].is_empty()).then(|| {
+                    parents[index]
+                        .iter()
+                        .map(|&parent| centers[parent])
+                        .sum::<i64>()
+                        / parents[index].len() as i64
+                })
+            })
+            .collect::<Vec<_>>();
+        let mut placed = Vec::<i64>::with_capacity(rank.len());
+        for (position, &index) in rank.iter().enumerate() {
+            let mut center = wanted[position].unwrap_or(0);
+            if position > 0 {
+                let previous = rank[position - 1];
+                let previous_end =
+                    placed[position - 1] - cross_size(previous) / 2 + cross_size(previous) - 1;
+                let mut nearest = previous_end + 1 + cross_gap + cross_size(index) / 2;
+                // keep sibling centres an even distance apart so a pair can
+                // sit exactly either side of the parent they share.
+                nearest += (nearest - placed[position - 1]).rem_euclid(2);
+                center = center.max(nearest);
+            }
+            placed.push(center);
+        }
+        let asked = wanted
+            .iter()
+            .zip(&placed)
+            .filter_map(|(wanted, placed)| wanted.map(|wanted| (wanted, *placed)))
+            .collect::<Vec<_>>();
+        let shift = if asked.is_empty() {
+            0
+        } else {
+            asked
+                .iter()
+                .map(|(wanted, placed)| wanted - placed)
+                .sum::<i64>()
+                / asked.len() as i64
+        };
+        for (&index, center) in rank.iter().zip(placed) {
+            centers[index] = center + shift;
+        }
+    }
+    let cross_starts = (0..count)
+        .map(|index| centers[index] - cross_size(index) / 2)
+        .collect::<Vec<_>>();
+    let cross_offset = -cross_starts.iter().copied().min()?;
+
+    // ranks follow one another with room for the longest edge label between.
+    let rank_sizes = ranks
+        .iter()
+        .map(|rank| {
+            if horizontal {
+                rank.iter().map(|&index| widths[index]).max().unwrap_or(0)
+            } else {
+                NODE_HEIGHT
+            }
+        })
+        .collect::<Vec<_>>();
+    let mut rank_starts = vec![0i64; ranks.len()];
+    for rank in 1..ranks.len() {
+        let gap = if horizontal {
+            let longest_label = graph
+                .edges
+                .iter()
+                .filter(|edge| rank_of[edge.tail_idx] == rank - 1)
+                .filter_map(|edge| edge.label.as_deref())
+                .map(|label| label.trim().chars().count() as i64)
+                .max()
+                .unwrap_or(0);
+            // a labelled fork turns halfway across the gap, so the first half
+            // must hold "- label -" before the corner.
+            ((rank_sep * 16.0).round() as i64)
+                .max(8)
+                .max(2 * longest_label + 9)
+        } else {
+            ((rank_sep * 5.0).round() as i64).max(5)
+        };
+        rank_starts[rank] = rank_starts[rank - 1] + rank_sizes[rank - 1] + gap;
+    }
+
+    let rects = (0..count)
+        .map(|index| {
+            let rank = rank_of[index];
+            let cross = (cross_starts[index] + cross_offset) as usize;
+            if horizontal {
+                hascii::scale::GridRect {
+                    left: (rank_starts[rank] + (rank_sizes[rank] - widths[index]) / 2) as usize,
+                    top: cross,
+                    width: widths[index] as usize,
+                    height: NODE_HEIGHT as usize,
+                }
+            } else {
+                hascii::scale::GridRect {
+                    left: cross,
+                    top: rank_starts[rank] as usize,
+                    width: widths[index] as usize,
+                    height: NODE_HEIGHT as usize,
+                }
+            }
+        })
+        .collect::<Vec<_>>();
+    let width = rects.iter().map(|rect| rect.right() + 1).max()?;
+    let height = rects.iter().map(|rect| rect.bottom() + 1).max()?;
+    Some(FlowPlacement {
+        rects,
+        width,
+        height,
+    })
+}
+
+fn draw_flow_boxes(
+    grid: &mut hascii::grid::CharGrid,
+    rects: &[hascii::scale::GridRect],
+    nodes: &[hascii::model::Node],
+) {
+    use hascii::grid::Cell;
+    for (rect, node) in rects.iter().zip(nodes) {
+        for row in [rect.top, rect.bottom()] {
+            grid.draw_hline(row, rect.left, rect.right(), '-');
+            grid.set(row, rect.left, Cell::NodeContent('+'));
+            grid.set(row, rect.right(), Cell::NodeContent('+'));
+        }
+        grid.draw_text(
+            rect.top + 1,
+            rect.left,
+            &format!("| {} |", node.label.trim()),
+        );
+    }
+}
+
+/// Draw a top-to-bottom flowchart with square forks and merges between ranks.
+/// Returns `None` when [`place_flow_nodes`] cannot place the graph.
+fn render_vertical_layout(
+    graph: &hascii::model::LayoutGraph,
+    node_sep: f64,
+    rank_sep: f64,
+) -> Option<String> {
+    let placement = place_flow_nodes(graph, false, node_sep, rank_sep)?;
+    let rects = &placement.rects;
+    let mut grid = hascii::grid::CharGrid::new(placement.width, placement.height);
+    draw_flow_boxes(&mut grid, rects, &graph.nodes);
+
+    let mut outgoing = vec![0usize; graph.nodes.len()];
+    let mut incoming = vec![0usize; graph.nodes.len()];
+    for edge in &graph.edges {
+        outgoing[edge.tail_idx] += 1;
+        incoming[edge.head_idx] += 1;
+    }
+    for edge in &graph.edges {
+        let source = &rects[edge.tail_idx];
+        let target = &rects[edge.head_idx];
+        let below_source = source.bottom() + 1;
+        let arrow_row = target.top - 1;
+        let fork_row = below_source + 1;
+        let merge_row = arrow_row - 1;
+        let (source_col, target_col) = (source.center_col(), target.center_col());
+        let (path, label_col) = if source_col == target_col {
+            (
+                vec![(below_source, source_col), (arrow_row, target_col)],
+                target_col,
+            )
+        } else if outgoing[edge.tail_idx] > 1 || incoming[edge.head_idx] < 2 {
+            (
+                vec![
+                    (below_source, source_col),
+                    (fork_row, source_col),
+                    (fork_row, target_col),
+                    (arrow_row, target_col),
+                ],
+                target_col,
+            )
+        } else {
+            (
+                vec![
+                    (below_source, source_col),
+                    (merge_row, source_col),
+                    (merge_row, target_col),
+                    (arrow_row, target_col),
+                ],
+                source_col,
+            )
+        };
+        draw_flow_edge_path(&mut grid, &path);
+        grid.set(arrow_row, target_col, hascii::grid::Cell::Arrow('v'));
+        if let Some(label) = edge
+            .label
+            .as_deref()
+            .map(str::trim)
+            .filter(|label| !label.is_empty())
+        {
+            draw_edge_label(&mut grid, fork_row + 1, label_col + 1, label);
+        }
+    }
+    Some(grid.render())
 }
 
 fn draw_edge_label(grid: &mut hascii::grid::CharGrid, row: usize, col: usize, label: &str) {
@@ -2391,8 +2701,16 @@ fn format_flow_diagram(diagram: &FlowDiagram, wrap_width: usize) -> Result<Strin
     }
     dot.push_str("}\n");
 
+    let layout = || {
+        hascii::graphviz::layout(&dot)
+            .map_err(|error| format!("could not render --flow-chart: {error}"))
+    };
     let rendered = if diagram.direction == "LR" {
-        render_horizontal_dot(&dot)?
+        render_horizontal_layout(&layout()?, diagram.node_sep, diagram.rank_sep)
+    } else if let Some(rendered) =
+        render_vertical_layout(&layout()?, diagram.node_sep, diagram.rank_sep)
+    {
+        rendered
     } else {
         let mut options = hascii::RenderOptions::default();
         options.border_mode = hascii::BorderMode::Plain;
