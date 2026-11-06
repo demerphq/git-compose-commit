@@ -335,8 +335,7 @@ fn renders_speech_and_thought_bubbles_with_each_speaker() {
             " .-------.\n",
             "( Mooooo )\n",
             " '-------'\n",
-            "    /\n",
-            "    /\n",
+            "   \\/\n",
             "  /\\_/\\\n",
             " ( o.o )\n",
             "  > ^ <\n",
@@ -431,6 +430,17 @@ fn bubble_defaults_above_speaker_and_fits_message_margin() {
             }
         }
     }
+}
+
+#[test]
+fn speech_bubble_has_one_pointer_below_the_frame() {
+    let rendered = message(&[
+        "--bubble=speaker=dog;style=voice;speaker-side=below;bubble-side=left;float=left;phrase=You can't make things up and expect the computer to understand what you mean!",
+    ]);
+    let lines = rendered.lines().collect::<Vec<_>>();
+    let frame_bottom = lines.iter().position(|line| line.contains("'---")).unwrap();
+    assert_eq!(lines[frame_bottom + 1].trim(), "\\/");
+    assert!(lines[frame_bottom + 2].contains("/ \\__"));
 }
 
 #[test]

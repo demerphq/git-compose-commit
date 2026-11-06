@@ -2259,24 +2259,10 @@ fn format_bubble(bubble: &Bubble, wrap_width: usize) -> String {
                 .map(|line| format!("{}{line}", " ".repeat(bubble_x)))
                 .collect::<Vec<_>>();
             let speaker_center = avatar_x + avatar_width / 2;
-            let bubble_center = bubble_x + bubble_width / 2;
-            let direction = speaker_center.cmp(&bubble_center);
             let base_x = speaker_center.clamp(bubble_x + 2, bubble_x + bubble_width - 3);
             match bubble.style {
                 BubbleStyle::Speech => {
-                    for step in 1..=2 {
-                        let x = base_x as isize
-                            + (speaker_center as isize - base_x as isize) * step / 3;
-                        output.push(place_bubble_mark(
-                            canvas_width,
-                            x as usize,
-                            match direction {
-                                std::cmp::Ordering::Less => '/',
-                                std::cmp::Ordering::Equal => '|',
-                                std::cmp::Ordering::Greater => '\\',
-                            },
-                        ));
-                    }
+                    output.push(format!("{}\\/", " ".repeat(base_x.saturating_sub(1))));
                 }
                 BubbleStyle::Thought => {
                     for (step, mark) in ['O', 'o', '.'].into_iter().enumerate() {
