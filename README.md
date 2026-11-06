@@ -35,6 +35,10 @@ its `dot` command on your `PATH` (for example, `brew install graphviz`). Use
 `git-compose-commit --help`, `--help=long`, or `--man` for the detailed guide
 with examples and their output. Use `--version` to print the installed version.
 
+To focus on one subject, use `--help=TOPIC`, for example `--help=bubbles`,
+`--help=tables`, or `--help=flowcharts`. `--help=examples` shows only the
+example commands and their output. Use `-h` to see the full topic list.
+
 To preview a composed message without creating a commit, use `--stdout`:
 
 ```sh

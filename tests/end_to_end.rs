@@ -201,7 +201,7 @@ fn help_switches_between_synopsis_and_detailed_guide() {
     assert!(short.contains("Usage: git-compose-commit"));
     assert!(short.contains("Create a commit:"));
     assert!(short.contains("Preview without committing:"));
-    assert!(short.contains("Use --help or --man for examples"));
+    assert!(short.contains("Focus with --help=TOPIC"));
     assert!(!short.contains("--footer-N TEXT"));
     assert!(short.lines().all(|line| line.len() <= 80));
 
@@ -252,6 +252,47 @@ fn help_switches_between_synopsis_and_detailed_guide() {
         String::from_utf8(version.stdout).expect("version output is UTF-8"),
         format!("git-compose-commit {}\n", env!("CARGO_PKG_VERSION"))
     );
+}
+
+#[test]
+fn help_topics_show_only_relevant_reference_and_examples() {
+    let repo = TestRepo::new();
+    for (topic, section, example) in [
+        ("message", "MESSAGE OPTIONS", "3. Fields and a note"),
+        ("output", "OUTPUT AND CONTROL", "2. Preview only"),
+        ("tables", "TABLES", "4. Table"),
+        ("lists", "LISTS", "5. Nested list"),
+        ("footers", "FOOTERS", "6. Numbered footer"),
+        ("charts", "BAR CHARTS", "7. Horizontal bar chart"),
+        (
+            "flowcharts",
+            "BRANCHING FLOWCHARTS",
+            "9. Branching flowchart",
+        ),
+        ("bubbles", "SPEECH AND THOUGHT BUBBLES", "10. Speech bubble"),
+    ] {
+        let output = run_composer(repo.path(), &[&format!("--help={topic}")]);
+        assert!(output.status.success(), "{topic}: {output:?}");
+        let help = String::from_utf8(output.stdout).expect("topic help is UTF-8");
+        assert!(help.contains(section), "{topic}: {help}");
+        assert!(help.contains(example), "{topic}: {help}");
+        assert!(help.lines().all(|line| line.len() <= 80));
+    }
+
+    let bubbles = run_composer(repo.path(), &["--help=bubbles"]);
+    let bubbles = String::from_utf8(bubbles.stdout).unwrap();
+    assert!(!bubbles.contains("--table-rows"));
+    assert!(bubbles.contains("11. Thought bubble"));
+
+    let examples = run_composer(repo.path(), &["--help=examples"]);
+    let examples = String::from_utf8(examples.stdout).unwrap();
+    assert!(examples.contains("1. Basic commit"));
+    assert!(examples.contains("12. Combine paragraphs"));
+    assert!(!examples.contains("MESSAGE OPTIONS"));
+
+    let unknown = run_composer(repo.path(), &["--help=unknown"]);
+    assert_eq!(unknown.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&unknown.stderr).contains("unknown help topic 'unknown'"));
 }
 
 #[test]

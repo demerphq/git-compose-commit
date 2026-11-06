@@ -129,6 +129,9 @@ ALIASES, DEFAULTS, AND HELP
   -h, --help=short     Show the quick synopsis
   --help, --help=long  Show this guide
   --man                Show this same guide
+  --help=TOPIC          Show one topic with its examples:
+                        message, output, tables, lists, footers, charts,
+                        flowcharts, bubbles, or examples
   --version            Show the installed package version
 
 EXAMPLES

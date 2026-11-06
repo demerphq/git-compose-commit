@@ -247,6 +247,85 @@ fn usage() -> &'static str {
     include_str!("help/long.txt").trim_end()
 }
 
+const HELP_HEADINGS: &[&str] = &[
+    "HOW IT WORKS",
+    "MESSAGE OPTIONS",
+    "OUTPUT AND CONTROL",
+    "TABLES",
+    "LISTS",
+    "FOOTERS",
+    "BAR CHARTS",
+    "LINEAR FLOW CHARTS",
+    "BRANCHING FLOWCHARTS",
+    "SPEECH AND THOUGHT BUBBLES",
+    "ALIASES, DEFAULTS, AND HELP",
+    "EXAMPLES",
+];
+
+fn help_section(guide: &str, heading: &str) -> Option<String> {
+    let marker = format!("\n{heading}\n\n");
+    let start = guide.find(&marker)? + 1;
+    let end = HELP_HEADINGS
+        .iter()
+        .filter(|other| **other != heading)
+        .filter_map(|other| {
+            let marker = format!("\n{other}\n\n");
+            guide[start + 1..]
+                .find(&marker)
+                .map(|offset| start + 1 + offset)
+        })
+        .min()
+        .unwrap_or(guide.len());
+    Some(guide[start..end].trim_end().to_owned())
+}
+
+fn help_example(guide: &str, number: usize) -> Option<String> {
+    let marker = format!("\n  {number}. ");
+    let start = guide.find(&marker)? + 1;
+    let next = format!("\n  {}. ", number + 1);
+    let end = guide[start..]
+        .find(&next)
+        .map(|offset| start + offset)
+        .unwrap_or(guide.len());
+    Some(guide[start..end].trim_end().to_owned())
+}
+
+fn topic_help(topic: &str) -> Result<String, String> {
+    let (sections, examples): (&[&str], &[usize]) = match topic {
+        "message" => (&["HOW IT WORKS", "MESSAGE OPTIONS"], &[1, 3, 12]),
+        "output" => (&["OUTPUT AND CONTROL"], &[2]),
+        "tables" => (&["TABLES"], &[4]),
+        "lists" => (&["LISTS"], &[5]),
+        "footers" => (&["FOOTERS"], &[6]),
+        "charts" => (&["BAR CHARTS"], &[7]),
+        "flowcharts" => (&["LINEAR FLOW CHARTS", "BRANCHING FLOWCHARTS"], &[8, 9]),
+        "bubbles" => (&["SPEECH AND THOUGHT BUBBLES"], &[10, 11]),
+        "examples" => (&[], &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]),
+        _ => {
+            return Err(format!(
+                "unknown help topic '{topic}'; choose message, output, tables, lists, footers, charts, flowcharts, bubbles, or examples"
+            ));
+        }
+    };
+    let guide = usage();
+    let mut blocks = vec![format!("git-compose-commit - {topic}")];
+    for heading in sections {
+        blocks.push(
+            help_section(guide, heading)
+                .ok_or_else(|| format!("internal help error: section '{heading}' is missing"))?,
+        );
+    }
+    blocks.push("EXAMPLES".to_owned());
+    for number in examples {
+        blocks.push(
+            help_example(guide, *number)
+                .ok_or_else(|| format!("internal help error: example {number} is missing"))?,
+        );
+    }
+    blocks.push("Use --help=long for the complete guide.".to_owned());
+    Ok(blocks.join("\n\n"))
+}
+
 fn as_text(value: &OsStr, option: &str) -> Result<String, String> {
     value
         .to_str()
@@ -598,6 +677,10 @@ fn parse_args(args: Vec<OsString>, config: &ComposeConfig) -> Result<ParsedArgs,
             || arg == OsStr::new("--man")
         {
             println!("{}", usage());
+            std::process::exit(0);
+        }
+        if let Some(topic) = arg.to_str().and_then(|value| value.strip_prefix("--help=")) {
+            println!("{}", topic_help(topic)?);
             std::process::exit(0);
         }
         if arg == OsStr::new("--version") {
@@ -2711,11 +2794,10 @@ pub fn compose(args: Vec<OsString>) -> Result<(String, Vec<OsString>), String> {
     let help_requested = args
         .iter()
         .take_while(|arg| arg.as_os_str() != OsStr::new("--"))
-        .any(|arg| {
-            matches!(
-                arg.to_str(),
-                Some("-h" | "--help" | "--help=short" | "--help=long" | "--man" | "--version")
-            )
+        .any(|arg| match arg.to_str() {
+            Some("-h" | "--help" | "--man" | "--version") => true,
+            Some(value) => value.starts_with("--help="),
+            None => false,
         });
     let config = if help_requested {
         ComposeConfig::default()

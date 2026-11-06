@@ -14,4 +14,5 @@ Structure: --th/--tr, --list-item, --numlist, --bullets, --footer-N
 Visuals:   --bubble, --hbar-chart, --vbar-chart, --flow-chart
 Control:   --stdout, --output, --wrap-width, --rand-seed, --version
 
-Use --help or --man for examples, all options, and syntax.
+Use --help or --man for the full guide. Focus with --help=TOPIC:
+  message, output, tables, lists, footers, charts, flowcharts, bubbles, examples
