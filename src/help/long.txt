@@ -223,9 +223,9 @@ EXAMPLES
      Output:
        Flow
 
-       +----------+      +----------+
-       |  Parse   | -->  | Validate |
-       +----------+      +----------+
+       +----------+     +----------+
+       |  Parse   | --> | Validate |
+       +----------+     +----------+
 
   9. Branching flowchart. Install Graphviz so dot is on PATH:
      git-compose-commit --subject 'Branch' \

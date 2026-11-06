@@ -2164,22 +2164,24 @@ fn format_flow_chart(chart: &FlowChart, wrap_width: usize) -> String {
         ChartOrientation::Horizontal => {
             let boxes = chart.steps.iter().map(|step| render_box(step));
             let boxes = boxes.collect::<Vec<_>>();
+            let arrow = " --> ";
+            let spacer = " ".repeat(arrow.len());
             [
                 boxes
                     .iter()
                     .map(|(top, _, _)| top.as_str())
                     .collect::<Vec<_>>()
-                    .join("      "),
+                    .join(&spacer),
                 boxes
                     .iter()
                     .map(|(_, middle, _)| middle.as_str())
                     .collect::<Vec<_>>()
-                    .join(" -->  "),
+                    .join(arrow),
                 boxes
                     .iter()
                     .map(|(_, _, bottom)| bottom.as_str())
                     .collect::<Vec<_>>()
-                    .join("      "),
+                    .join(&spacer),
             ]
             .join("\n")
         }
@@ -2293,6 +2295,7 @@ fn format_bubble(bubble: &Bubble, wrap_width: usize) -> String {
                 (BubbleStyle::Thought, SpeakerSide::Right) => " O o . ",
                 (BubbleStyle::Thought, SpeakerSide::Below) => unreachable!(),
             };
+            let blank_spacer = " ".repeat(connector.len());
             (0..height)
                 .map(|row| {
                     let bubble_line = row
@@ -2308,7 +2311,7 @@ fn format_bubble(bubble: &Bubble, wrap_width: usize) -> String {
                     let spacer = if row == bubble_row {
                         connector
                     } else {
-                        "       "
+                        &blank_spacer
                     };
                     match bubble.speaker_side {
                         SpeakerSide::Left => format!(

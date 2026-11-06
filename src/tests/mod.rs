@@ -72,9 +72,9 @@ fn renders_horizontal_flow_chart_as_a_box_chain() {
     assert_eq!(
         message(&["--hflow-chart=float=left;data=Parse,Validate,Commit"]),
         concat!(
-            "+----------+      +----------+      +----------+\n",
-            "|  Parse   | -->  | Validate | -->  |  Commit  |\n",
-            "+----------+      +----------+      +----------+\n",
+            "+----------+     +----------+     +----------+\n",
+            "|  Parse   | --> | Validate | --> |  Commit  |\n",
+            "+----------+     +----------+     +----------+\n",
         )
     );
 }
@@ -387,14 +387,32 @@ fn bubble_speaker_can_sit_to_either_side() {
     assert_eq!(
         message(&["--bubble=speaker=cat;style=voice;phrase=Hi;speaker-side=left;bubble-side=center;float=left"]),
         concat!(
-            " /\\_/\\         .---.\n",
+            " /\\_/\\       .---.\n",
             "( o.o ) <-- ( Hi )\n",
-            " > ^ <         '---'\n",
+            " > ^ <       '---'\n",
         )
     );
     assert!(
         message(&["--bubble=speaker=cat;style=voice;phrase=Hi;speaker-side=right;bubble-side=center;float=left"])
             .contains("( Hi ) --> ( o.o )")
+    );
+}
+
+#[test]
+fn side_speech_bubble_keeps_avatar_in_one_column() {
+    let rendered =
+        message(&["--bubble=speaker=cat;style=voice;phrase=Hi;speaker-side=right;float=left"]);
+    let lines = rendered.lines().collect::<Vec<_>>();
+    let head = lines.iter().find(|line| line.contains("/\\_/\\")).unwrap();
+    let face = lines.iter().find(|line| line.contains("( o.o )")).unwrap();
+    let feet = lines.iter().find(|line| line.contains("> ^ <")).unwrap();
+    assert_eq!(
+        head.find("/\\_/\\").unwrap() - 1,
+        face.find("( o.o )").unwrap()
+    );
+    assert_eq!(
+        feet.find("> ^ <").unwrap() - 1,
+        face.find("( o.o )").unwrap()
     );
 }
 
