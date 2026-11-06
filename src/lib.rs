@@ -2234,7 +2234,7 @@ fn format_bubble(bubble: &Bubble, wrap_width: usize) -> String {
         .max(1);
     let lines = match bubble.style {
         BubbleStyle::Speech => {
-            let border = "-".repeat(phrase_width + 1);
+            let border = "-".repeat(phrase_width);
             let mut lines = vec![format!(" .{border}.")];
             lines.extend(
                 phrase_lines

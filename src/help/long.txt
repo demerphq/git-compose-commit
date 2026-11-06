@@ -249,9 +249,9 @@ EXAMPLES
       Output:
         Bubble
 
-         .---.
+         .--.
         ( Hi )
-         '---'
+         '--'
            \
          /\_/\
         ( o.o )

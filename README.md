@@ -292,9 +292,9 @@ Output:
 ```text
 A quick note
 
- .---.
+ .--.
 ( Hi )
- '---'
+ '--'
    \
  /\_/\
 ( o.o )

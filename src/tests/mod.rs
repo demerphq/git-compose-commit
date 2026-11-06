@@ -349,9 +349,9 @@ fn renders_speech_and_thought_bubbles_with_each_speaker() {
     assert_eq!(
         message(&["--bubble=speaker=cat;style=voice;speaker-side=below;bubble-side=center;phrase=Mooooo;float=left"]),
         concat!(
-            " .-------.\n",
+            " .------.\n",
             "( Mooooo )\n",
-            " '-------'\n",
+            " '------'\n",
             "     \\\n",
             "   /\\_/\\\n",
             "  ( o.o )\n",
@@ -377,9 +377,25 @@ fn bubble_alignment_supports_left_center_and_right() {
     let left = message(&["--bubble=speaker=cat;style=voice;speaker-side=below;bubble-side=center;phrase=Hi;float=left"]);
     let centered = message(&["--bubble=speaker=cat;style=voice;speaker-side=below;bubble-side=center;phrase=Hi;float=center"]);
     let right = message(&["--bubble=speaker=cat;style=voice;speaker-side=below;bubble-side=center;phrase=Hi;float=right"]);
-    assert!(left.starts_with(" .---."));
-    assert!(centered.starts_with(&format!("{} .---.", " ".repeat(32))));
-    assert!(right.starts_with(&format!("{} .---.", " ".repeat(65))));
+    assert!(left.starts_with(" .--."));
+    assert!(centered.starts_with(&format!("{} .--.", " ".repeat(32))));
+    assert!(right.starts_with(&format!("{} .--.", " ".repeat(65))));
+}
+
+#[test]
+fn short_speech_bubble_sits_above_cat() {
+    assert_eq!(
+        message(&["--bubble=speaker=cat;style=voice;phrase=Hi;speaker-side=below;bubble-side=center;float=left"]),
+        concat!(
+            " .--.\n",
+            "( Hi )\n",
+            " '--'\n",
+            "   \\\n",
+            " /\\_/\\\n",
+            "( o.o )\n",
+            " > ^ <\n",
+        )
+    );
 }
 
 #[test]
@@ -387,9 +403,9 @@ fn bubble_speaker_can_sit_to_either_side() {
     assert_eq!(
         message(&["--bubble=speaker=cat;style=voice;phrase=Hi;speaker-side=left;bubble-side=center;float=left"]),
         concat!(
-            " /\\_/\\       .---.\n",
+            " /\\_/\\       .--.\n",
             "( o.o ) <-- ( Hi )\n",
-            " > ^ <       '---'\n",
+            " > ^ <       '--'\n",
         )
     );
     assert!(
