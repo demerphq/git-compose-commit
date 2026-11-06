@@ -6,7 +6,7 @@
 Show process flow
 
 +----------+      +----------+      +----------+
-|  Parse   | --> | Validate | --> |  Commit  |
+|  Parse   | -->  | Validate | -->  |  Commit  |
 +----------+      +----------+      +----------+
 
 +--------+

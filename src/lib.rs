@@ -2174,7 +2174,7 @@ fn format_flow_chart(chart: &FlowChart, wrap_width: usize) -> String {
                     .iter()
                     .map(|(_, middle, _)| middle.as_str())
                     .collect::<Vec<_>>()
-                    .join(" --> "),
+                    .join(" -->  "),
                 boxes
                     .iter()
                     .map(|(_, _, bottom)| bottom.as_str())

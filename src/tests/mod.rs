@@ -73,10 +73,27 @@ fn renders_horizontal_flow_chart_as_a_box_chain() {
         message(&["--hflow-chart=float=left;data=Parse,Validate,Commit"]),
         concat!(
             "+----------+      +----------+      +----------+\n",
-            "|  Parse   | --> | Validate | --> |  Commit  |\n",
+            "|  Parse   | -->  | Validate | -->  |  Commit  |\n",
             "+----------+      +----------+      +----------+\n",
         )
     );
+}
+
+#[test]
+fn horizontal_flow_chart_boxes_align_across_all_rows() {
+    let rendered = message(&["--hflow-chart=float=left;data=Parse,Validate,Commit"]);
+    let lines = rendered.lines().collect::<Vec<_>>();
+    let border_starts = lines[0]
+        .match_indices("+----------+")
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    let label_starts = lines[1]
+        .match_indices('|')
+        .step_by(2)
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    assert_eq!(border_starts, label_starts);
+    assert_eq!(lines[0], lines[2]);
 }
 
 #[test]
