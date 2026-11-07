@@ -269,6 +269,7 @@ fn help_topics_show_only_relevant_reference_and_examples() {
             "BRANCHING FLOWCHARTS",
             "11. Branching flowchart",
         ),
+        ("visuals", "VISUAL DECORATIONS", "15. Heading and badges"),
         ("bubbles", "SPEECH AND THOUGHT BUBBLES", "12. Speech bubble"),
     ] {
         let output = run_composer(repo.path(), &[&format!("--help={topic}")]);
@@ -540,4 +541,168 @@ fn stdout_mode_prints_without_committing_and_rejects_git_options() {
         .output()
         .expect("check that stdout mode did not create a commit");
     assert!(!head.status.success());
+}
+
+#[test]
+fn agent_skills_are_standalone_deterministic_and_extractable() {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let repo = TestRepo::new();
+    fs::write(repo.path().join(".compose-commit.toml"), "invalid = true\n").unwrap();
+    let list = run_composer_with_home(repo.path(), repo.path(), &["--agent-usage-list-skills"]);
+    assert!(list.status.success());
+    assert!(list.stderr.is_empty());
+    let names = std::str::from_utf8(&list.stdout)
+        .unwrap()
+        .lines()
+        .collect::<Vec<_>>();
+    assert_eq!(names.len(), 10);
+    let mut files = fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/skills"))
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .collect::<Vec<_>>();
+    files.sort();
+    let mut listed = names.clone();
+    listed.sort();
+    assert_eq!(files, listed);
+    for name in &names {
+        let option = format!("--agent-usage-show-skill={name}");
+        let shown = run_composer(repo.path(), &[&option]);
+        assert!(shown.status.success());
+        let text = std::str::from_utf8(&shown.stdout).unwrap();
+        assert!(text.starts_with(&format!("---\nname: {name}\ndescription: ")));
+        assert!(text.contains("\n---\n"));
+        assert!(shown.stderr.is_empty());
+    }
+    let all = run_composer(repo.path(), &["--agent-usage-show-skill=ALL"]);
+    let repeated = run_composer(repo.path(), &["--agent-usage-show-skill=ALL"]);
+    assert!(all.status.success());
+    assert_eq!(all.stdout, repeated.stdout);
+    let destination = repo.path().join("extracted");
+    let mut child = Command::new("python3")
+        .arg(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/scripts/extract-agent-skills.py"
+        ))
+        .arg(&destination)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(&all.stdout).unwrap();
+    let extraction = child.wait_with_output().unwrap();
+    assert!(
+        extraction.status.success(),
+        "{}",
+        String::from_utf8_lossy(&extraction.stderr)
+    );
+    for name in &names {
+        let actual = fs::read(destination.join(name).join("SKILL.md")).unwrap();
+        let option = format!("--agent-usage-show-skill={name}");
+        assert_eq!(actual, run_composer(repo.path(), &[&option]).stdout);
+    }
+    assert!(destination
+        .join("git-compose-commit/scripts/extract-agent-skills.py")
+        .exists());
+    for args in [
+        vec!["--agent-usage-show-skill=missing"],
+        vec!["--agent-usage-show-skill="],
+        vec!["--agent-usage-list-skills", "--stdout"],
+        vec!["--agent-usage-unknown"],
+    ] {
+        let failure = run_composer(repo.path(), &args);
+        assert!(!failure.status.success(), "{args:?}");
+        assert!(failure.stdout.is_empty(), "{args:?}");
+        assert!(!failure.stderr.is_empty(), "{args:?}");
+    }
+    let ordinary = run_composer(
+        repo.path(),
+        &["--subject", "--agent-usage-list-skills", "--stdout"],
+    );
+    assert!(ordinary.status.success());
+    assert_eq!(ordinary.stdout, b"--agent-usage-list-skills\n");
+}
+
+#[test]
+fn compose_text_writes_without_invoking_git_and_matches_wrapper() {
+    let repo = TestRepo::new();
+    let options = [
+        "--subject",
+        "Refresh cache",
+        "--text",
+        "Keep readers updated.",
+    ];
+    let text = Command::new(env!("CARGO_BIN_EXE_compose-text"))
+        .args(options)
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+    assert!(
+        text.status.success(),
+        "{}",
+        String::from_utf8_lossy(&text.stderr)
+    );
+    let wrapper = run_composer(
+        repo.path(),
+        &[
+            "--subject",
+            "Refresh cache",
+            "--text",
+            "Keep readers updated.",
+            "--stdout",
+        ],
+    );
+    assert_eq!(text.stdout, wrapper.stdout);
+    assert_eq!(run_git(repo.path(), &["status", "--porcelain"]).stdout, b"");
+    let destination = repo.path().join("message.txt");
+    let output = Command::new(env!("CARGO_BIN_EXE_compose-text"))
+        .args(options)
+        .arg("--output")
+        .arg(&destination)
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    assert_eq!(fs::read(destination).unwrap(), text.stdout);
+    for extra in ["--all", "--signoff", "--", "path"] {
+        let failure = Command::new(env!("CARGO_BIN_EXE_compose-text"))
+            .args(options)
+            .arg(extra)
+            .current_dir(repo.path())
+            .output()
+            .unwrap();
+        assert!(!failure.status.success(), "{extra}");
+        assert!(failure.stdout.is_empty(), "{extra}");
+    }
+    let help = Command::new(env!("CARGO_BIN_EXE_compose-text"))
+        .arg("--help")
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&help.stdout).contains("without invoking Git"));
+    let version = Command::new(env!("CARGO_BIN_EXE_compose-text"))
+        .arg("--version")
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8(version.stdout).unwrap(),
+        format!("compose-text {}\n", env!("CARGO_PKG_VERSION"))
+    );
+    let skills = Command::new(env!("CARGO_BIN_EXE_compose-text"))
+        .arg("--agent-usage-list-skills")
+        .output()
+        .unwrap();
+    assert_eq!(
+        skills.stdout,
+        run_composer(repo.path(), &["--agent-usage-list-skills"]).stdout
+    );
+    let literal = Command::new(env!("CARGO_BIN_EXE_compose-text"))
+        .args(["--subject", "--stdout"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+    assert!(literal.status.success());
+    assert_eq!(literal.stdout, b"--stdout\n");
 }

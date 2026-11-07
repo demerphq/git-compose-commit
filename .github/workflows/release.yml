@@ -1,0 +1,158 @@
+name: Release artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Create a GitHub Release for the existing version tag
+        type: boolean
+        default: false
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: macos-15
+            target: aarch64-apple-darwin
+          - runner: windows-2022
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install musl tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build
+        run: |
+          cargo fetch --locked
+          cargo build --release --locked --target ${{ matrix.target }}
+      - name: Package and smoke test
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -eu
+          VERSION=$(python -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
+          BINARY="target/$TARGET/release/git-compose-commit"
+          TEXT_BINARY="target/$TARGET/release/compose-text"
+          if [ "$RUNNER_OS" = Windows ]; then BINARY="$BINARY.exe"; TEXT_BINARY="$TEXT_BINARY.exe"; fi
+          "$BINARY" --version
+          "$TEXT_BINARY" --version
+          "$BINARY" --agent-usage-list-skills
+          python scripts/package-release.py --version "$VERSION" --target "$TARGET" --binary "$BINARY" --text-binary "$TEXT_BINARY" --out dist
+      - name: Smoke test shell installer
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -eu
+          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
+          mkdir -p "$RUNNER_TEMP/release-server/v$VERSION"
+          cp dist/* "$RUNNER_TEMP/release-server/v$VERSION/"
+          python3 -m http.server 18743 --bind 127.0.0.1 --directory "$RUNNER_TEMP/release-server" > "$RUNNER_TEMP/http.log" 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID"' EXIT
+          sleep 2
+          export GIT_COMPOSE_COMMIT_RELEASE_BASE=http://127.0.0.1:18743
+          export GIT_COMPOSE_COMMIT_INSTALL_DIR="$RUNNER_TEMP/installed-bin"
+          sh scripts/install.sh "v$VERSION"
+          cmp "target/$TARGET/release/git-compose-commit" "$GIT_COMPOSE_COMMIT_INSTALL_DIR/git-compose-commit"
+          cmp "target/$TARGET/release/compose-text" "$GIT_COMPOSE_COMMIT_INSTALL_DIR/compose-text"
+          "$GIT_COMPOSE_COMMIT_INSTALL_DIR/git-compose-commit" --version
+      - name: Smoke test PowerShell installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = (cargo metadata --locked --no-deps --format-version 1 | ConvertFrom-Json).packages[0].version
+          $serverDir = Join-Path $env:RUNNER_TEMP 'release-server'
+          New-Item -ItemType Directory -Force (Join-Path $serverDir "v$version") | Out-Null
+          Copy-Item dist/* (Join-Path $serverDir "v$version")
+          $server = Start-Process python -ArgumentList '-m','http.server','18743','--bind','127.0.0.1','--directory',$serverDir -PassThru
+          try {
+            Start-Sleep -Seconds 2
+            $env:GIT_COMPOSE_COMMIT_RELEASE_BASE = 'http://127.0.0.1:18743'
+            $installDir = Join-Path $env:RUNNER_TEMP 'installed-bin'
+            ./scripts/install.ps1 -Version "v$version" -InstallDir $installDir
+            $built = Get-FileHash target/x86_64-pc-windows-msvc/release/git-compose-commit.exe
+            $installed = Get-FileHash (Join-Path $installDir 'git-compose-commit.exe')
+            if ($built.Hash -ne $installed.Hash) { throw 'Installed binary differs from build' }
+            $builtText = Get-FileHash target/x86_64-pc-windows-msvc/release/compose-text.exe
+            $installedText = Get-FileHash (Join-Path $installDir 'compose-text.exe')
+            if ($builtText.Hash -ne $installedText.Hash) { throw 'Installed text binary differs from build' }
+            & (Join-Path $installDir 'git-compose-commit.exe') --version
+            if ($LASTEXITCODE -ne 0) { throw 'Installed binary failed' }
+          } finally {
+            Stop-Process -Id $server.Id -ErrorAction SilentlyContinue
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  validate:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: Validate checksums and archive contents
+        run: python3 scripts/validate-release.py dist
+      - name: Prepare Homebrew formula
+        run: python3 scripts/render-homebrew.py dist > dist/git-compose-commit.rb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: validated-release
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    if: inputs.publish
+    needs: validate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: validated-release
+          path: dist
+      - name: Verify version tag and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
+          test "$(git rev-list -n 1 "v$VERSION")" = "$(git rev-parse HEAD)"
+          gh release create "v$VERSION" --verify-tag --generate-notes dist/* scripts/install.sh scripts/install.ps1

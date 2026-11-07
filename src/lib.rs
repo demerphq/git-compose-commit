@@ -9,8 +9,18 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
+mod agent_usage;
+
 const WRAP_WIDTH: usize = 72;
 const MAX_CHART_SIZE: usize = 256;
+const FORTUNES: &[&str] = &[
+    "Works on my machine; the machine has since left.",
+    "One more cache should fix the other caches.",
+    "Nothing is permanent except the temporary workaround.",
+    "Tests passed. The tests would like a word.",
+    "The bug was hiding behind a very confident comment.",
+    "Ship it after the tests finish arguing.",
+];
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 static BUBBLE_RANDOM_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -23,6 +33,14 @@ const COMPOSE_VALUE_OPTIONS: &[&str] = &[
     "--compose-note",
     "--compose-warning",
     "--compose-wrap-width",
+    "--compose-charset",
+    "--compose-sparkline",
+    "--compose-progress",
+    "--compose-checklist-item",
+    "--compose-banner",
+    "--compose-badges",
+    "--compose-fortune",
+    "--compose-stamp",
     "--compose-table-head",
     "--compose-table-row",
     "--compose-table-rows",
@@ -48,6 +66,14 @@ const COMPOSE_VALUE_OPTIONS: &[&str] = &[
     "--note",
     "--warning",
     "--wrap-width",
+    "--charset",
+    "--sparkline",
+    "--progress",
+    "--checklist-item",
+    "--banner",
+    "--badges",
+    "--fortune",
+    "--stamp",
     "--table-head",
     "--table-row",
     "--table-rows",
@@ -114,6 +140,11 @@ enum Section {
         rows: Vec<Vec<String>>,
     },
     BarChart(BarChart),
+    Sparkline(Sparkline),
+    Progress(Progress),
+    Banner(StyledText),
+    Badges(StyledText),
+    Stamp(StyledText),
     FlowChart(FlowChart),
     FlowDiagram(FlowDiagram),
     Bubble(Bubble),
@@ -126,6 +157,33 @@ struct BarChart {
     alignment: ChartAlignment,
     size: usize,
     entries: Vec<(String, u64)>,
+}
+
+#[derive(Debug)]
+struct Sparkline {
+    values: Vec<f64>,
+    label: Option<String>,
+    min: Option<f64>,
+    max: Option<f64>,
+    endpoints: bool,
+    alignment: ChartAlignment,
+}
+
+#[derive(Debug)]
+struct Progress {
+    fraction: f64,
+    width: usize,
+    label: Option<String>,
+    alignment: ChartAlignment,
+}
+
+#[derive(Debug)]
+struct StyledText {
+    text: String,
+    style: String,
+    label: Option<String>,
+    width: Option<usize>,
+    alignment: ChartAlignment,
 }
 
 #[derive(Debug)]
@@ -186,6 +244,29 @@ enum BubbleSpeaker {
     Cat,
     Dog,
     StickFigure,
+    Cow,
+    Robot,
+    Owl,
+    Dragon,
+    Penguin,
+    Duck,
+    Ghost,
+}
+
+fn bubble_speaker(value: &str) -> Option<BubbleSpeaker> {
+    Some(match value {
+        "cat" => BubbleSpeaker::Cat,
+        "dog" => BubbleSpeaker::Dog,
+        "stick-figure" => BubbleSpeaker::StickFigure,
+        "cow" => BubbleSpeaker::Cow,
+        "robot" => BubbleSpeaker::Robot,
+        "owl" => BubbleSpeaker::Owl,
+        "dragon" => BubbleSpeaker::Dragon,
+        "penguin" => BubbleSpeaker::Penguin,
+        "duck" | "rubber-duck" => BubbleSpeaker::Duck,
+        "ghost" => BubbleSpeaker::Ghost,
+        _ => return None,
+    })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -229,9 +310,54 @@ enum ChartAlignment {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Charset {
+    Ascii,
+    Unicode,
+}
+
+struct Palette {
+    horizontal: &'static str,
+    vertical: &'static str,
+    top: (&'static str, &'static str, &'static str),
+    middle: (&'static str, &'static str, &'static str),
+    bottom: (&'static str, &'static str, &'static str),
+    bar: &'static str,
+    arrow_right: &'static str,
+    arrow_down: &'static str,
+}
+
+impl Charset {
+    fn palette(self) -> Palette {
+        match self {
+            Self::Ascii => Palette {
+                horizontal: "-",
+                vertical: "|",
+                top: ("+", "+", "+"),
+                middle: ("+", "+", "+"),
+                bottom: ("+", "+", "+"),
+                bar: "#",
+                arrow_right: " --> ",
+                arrow_down: "v",
+            },
+            Self::Unicode => Palette {
+                horizontal: "─",
+                vertical: "│",
+                top: ("┌", "┬", "┐"),
+                middle: ("├", "┼", "┤"),
+                bottom: ("└", "┴", "┘"),
+                bar: "█",
+                arrow_right: " → ",
+                arrow_down: "↓",
+            },
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ListKind {
     Numbered,
     Bullets,
+    Check(bool),
 }
 
 #[derive(Debug)]
@@ -259,6 +385,7 @@ const HELP_HEADINGS: &[&str] = &[
     "BAR CHARTS",
     "LINEAR FLOW CHARTS",
     "BRANCHING FLOWCHARTS",
+    "VISUAL DECORATIONS",
     "SPEECH AND THOUGHT BUBBLES",
     "ALIASES, DEFAULTS, AND HELP",
     "EXAMPLES",
@@ -304,11 +431,12 @@ fn topic_help(topic: &str) -> Result<String, String> {
             &["LINEAR FLOW CHARTS", "BRANCHING FLOWCHARTS"],
             &[9, 10, 11],
         ),
+        "visuals" => (&["VISUAL DECORATIONS"], &[15]),
         "bubbles" => (&["SPEECH AND THOUGHT BUBBLES"], &[12, 13]),
-        "examples" => (&[], &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]),
+        "examples" => (&[], &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]),
         _ => {
             return Err(format!(
-                "unknown help topic '{topic}'; choose message, output, tables, lists, footers, charts, flowcharts, bubbles, or examples"
+                "unknown help topic '{topic}'; choose message, output, tables, lists, footers, charts, flowcharts, visuals, bubbles, or examples"
             ));
         }
     };
@@ -441,13 +569,10 @@ fn load_config_from(path: &std::path::Path) -> Result<ComposeConfig, String> {
                 );
             }
             "bubble_speaker" => {
-                config.bubble_speaker =
-                    Some(match parse_config_string(value, key, path)?.as_str() {
-                        "cat" => BubbleSpeaker::Cat,
-                        "dog" => BubbleSpeaker::Dog,
-                        "stick-figure" => BubbleSpeaker::StickFigure,
-                        _ => return Err(invalid("must be cat, dog, or stick-figure")),
-                    });
+                config.bubble_speaker = Some(
+                    bubble_speaker(&parse_config_string(value, key, path)?)
+                        .ok_or_else(|| invalid("must name a supported bubble speaker"))?,
+                );
             }
             "bubble_style" => {
                 config.bubble_style = Some(match parse_config_string(value, key, path)?.as_str() {
@@ -538,6 +663,24 @@ fn extract_output_option(
             after_separator = true;
             remaining.push(arg.clone());
             i += 1;
+            continue;
+        }
+        // An option-looking value belongs to its preceding option. In
+        // particular, a subject or paragraph may literally be "--stdout".
+        if git_option_takes_value(arg)
+            || COMPOSE_VALUE_OPTIONS
+                .iter()
+                .any(|name| arg == OsStr::new(name))
+            || is_dynamic_footer_option(arg)
+            || arg == OsStr::new("--rand-seed")
+            || arg == OsStr::new("--compose-rand-seed")
+        {
+            remaining.push(arg.clone());
+            i += 1;
+            if let Some(value) = args.get(i) {
+                remaining.push(value.clone());
+                i += 1;
+            }
             continue;
         }
         if let Some(inline) =
@@ -641,6 +784,7 @@ struct ParsedArgs {
     sections: Vec<Section>,
     footers: BTreeMap<usize, String>,
     wrap_width: usize,
+    charset: Charset,
     git_args: Vec<OsString>,
 }
 
@@ -651,6 +795,8 @@ fn parse_args(args: Vec<OsString>, config: &ComposeConfig) -> Result<ParsedArgs,
     let mut footers = BTreeMap::new();
     let mut wrap_width = config.wrap_width.unwrap_or(WRAP_WIDTH);
     let mut saw_wrap_width = false;
+    let mut charset = Charset::Ascii;
+    let mut saw_charset = false;
     let mut git_args = Vec::new();
     let mut active_table = None;
     let mut active_flow_diagram = None;
@@ -806,6 +952,20 @@ fn parse_args(args: Vec<OsString>, config: &ComposeConfig) -> Result<ParsedArgs,
                 i += 1;
                 continue;
             }
+            if matches!(name, "--charset" | "--compose-charset") {
+                active_flow_diagram = None;
+                if saw_charset {
+                    return Err("--charset may only be specified once".into());
+                }
+                saw_charset = true;
+                charset = match value.as_str() {
+                    "ascii" => Charset::Ascii,
+                    "unicode" => Charset::Unicode,
+                    _ => return Err("--charset must be ascii or unicode".into()),
+                };
+                i += 1;
+                continue;
+            }
             let canonical = match name {
                 "--subject" => "--compose-subject",
                 "--text" => "--compose-text",
@@ -818,6 +978,13 @@ fn parse_args(args: Vec<OsString>, config: &ComposeConfig) -> Result<ParsedArgs,
                 "--table-row" | "--tr" | "--compose-tr" => "--compose-table-row",
                 "--table-rows" => "--compose-table-rows",
                 "--hbar-chart" => "--compose-hbar-chart",
+                "--sparkline" => "--compose-sparkline",
+                "--progress" => "--compose-progress",
+                "--checklist-item" => "--compose-checklist-item",
+                "--banner" => "--compose-banner",
+                "--badges" => "--compose-badges",
+                "--fortune" => "--compose-fortune",
+                "--stamp" => "--compose-stamp",
                 "--vbar-chart" => "--compose-vbar-chart",
                 "--hflow-chart" => "--compose-hflow-chart",
                 "--vflow-chart" => "--compose-vflow-chart",
@@ -875,6 +1042,47 @@ fn parse_args(args: Vec<OsString>, config: &ComposeConfig) -> Result<ParsedArgs,
                 }
                 "--compose-note" => sections.push(Section::Note(value)),
                 "--compose-warning" => sections.push(Section::Warning(value)),
+                "--compose-sparkline" => {
+                    sections.push(Section::Sparkline(parse_sparkline(&value)?))
+                }
+                "--compose-progress" => sections.push(Section::Progress(parse_progress(&value)?)),
+                "--compose-banner" => sections.push(Section::Banner(parse_styled_text(
+                    &value, "--banner", "text", "box",
+                )?)),
+                "--compose-badges" => sections.push(Section::Badges(parse_styled_text(
+                    &value, "--badges", "labels", "plain",
+                )?)),
+                "--compose-stamp" => sections.push(Section::Stamp(parse_styled_text(
+                    &value, "--stamp", "name", "plain",
+                )?)),
+                "--compose-checklist-item" => {
+                    let (state, text) = value
+                        .split_once(':')
+                        .ok_or("--checklist-item requires done:TEXT or todo:TEXT")?;
+                    let checked = match state {
+                        "done" => true,
+                        "todo" => false,
+                        _ => return Err("--checklist-item requires done:TEXT or todo:TEXT".into()),
+                    };
+                    if text.trim().is_empty() {
+                        return Err("--checklist-item text cannot be empty".into());
+                    }
+                    let entry = ListEntry {
+                        kind: ListKind::Check(checked),
+                        depth: 0,
+                        text: text.trim().to_owned(),
+                    };
+                    match sections.last_mut() {
+                        Some(Section::List(items))
+                            if items
+                                .last()
+                                .is_some_and(|item| matches!(item.kind, ListKind::Check(_))) =>
+                        {
+                            items.push(entry)
+                        }
+                        _ => sections.push(Section::List(vec![entry])),
+                    }
+                }
                 "--compose-table-head" | "--compose-th" => {
                     let head = parse_table_cells(&value);
                     if head.is_empty() {
@@ -994,6 +1202,23 @@ fn parse_args(args: Vec<OsString>, config: &ComposeConfig) -> Result<ParsedArgs,
                         config,
                     )?));
                 }
+                "--compose-fortune" => {
+                    let index = if value == "random" {
+                        bubble_rng.index(FORTUNES.len())
+                    } else {
+                        value
+                            .parse::<usize>()
+                            .ok()
+                            .and_then(|n| n.checked_sub(1))
+                            .filter(|n| *n < FORTUNES.len())
+                            .ok_or("--fortune must be random or a number from 1 to 6")?
+                    };
+                    sections.push(Section::Bubble(parse_bubble(
+                        FORTUNES[index],
+                        &mut bubble_rng,
+                        config,
+                    )?));
+                }
                 "--compose-list" => {
                     let kind = match value.as_str() {
                         "numbered" => ListKind::Numbered,
@@ -1063,6 +1288,7 @@ fn parse_args(args: Vec<OsString>, config: &ComposeConfig) -> Result<ParsedArgs,
         sections,
         footers,
         wrap_width,
+        charset,
         git_args,
     })
 }
@@ -1119,34 +1345,43 @@ fn parse_table_cells(value: &str) -> Vec<String> {
         .collect()
 }
 
-fn format_table(head: &[String], rows: &[Vec<String>]) -> String {
+fn format_table(head: &[String], rows: &[Vec<String>], charset: Charset) -> String {
+    let palette = charset.palette();
     let mut widths: Vec<usize> = head.iter().map(|cell| display_width(cell)).collect();
     for row in rows {
         for (width, cell) in widths.iter_mut().zip(row) {
             *width = (*width).max(display_width(cell));
         }
     }
-    let border = format!(
-        "+{}+",
-        widths
-            .iter()
-            .map(|width| "-".repeat(width + 2))
-            .collect::<Vec<_>>()
-            .join("+")
-    );
+    let border = |(left, join, right): (&str, &str, &str)| {
+        format!(
+            "{left}{}{right}",
+            widths
+                .iter()
+                .map(|width| palette.horizontal.repeat(width + 2))
+                .collect::<Vec<_>>()
+                .join(join)
+        )
+    };
     let render_row = |row: &[String]| {
         format!(
-            "| {} |",
+            "{} {} {}",
+            palette.vertical,
             row.iter()
                 .zip(&widths)
                 .map(|(cell, width)| pad_left_aligned(cell, *width))
                 .collect::<Vec<_>>()
-                .join(" | ")
+                .join(&format!(" {} ", palette.vertical)),
+            palette.vertical
         )
     };
-    let mut lines = vec![border.clone(), render_row(head), border.clone()];
+    let mut lines = vec![
+        border(palette.top),
+        render_row(head),
+        border(palette.middle),
+    ];
     lines.extend(rows.iter().map(|row| render_row(row)));
-    lines.push(border);
+    lines.push(border(palette.bottom));
     lines.join("\n")
 }
 
@@ -1210,6 +1445,440 @@ fn parse_bar_chart(value: &str, orientation: ChartOrientation) -> Result<BarChar
     } else {
         parse_chart_data(value, option_name, alignment, orientation, size)
     }
+}
+
+fn parse_visual_alignment(value: &str, option: &str) -> Result<ChartAlignment, String> {
+    match value {
+        "left" => Ok(ChartAlignment::Left),
+        "center" => Ok(ChartAlignment::Center),
+        "right" => Ok(ChartAlignment::Right),
+        _ => Err(format!("{option} float must be left, center, or right")),
+    }
+}
+
+fn parse_sparkline(value: &str) -> Result<Sparkline, String> {
+    let mut chart = Sparkline {
+        values: Vec::new(),
+        label: None,
+        min: None,
+        max: None,
+        endpoints: false,
+        alignment: ChartAlignment::Center,
+    };
+    let mut data = None;
+    let mut seen = BTreeSet::new();
+    if !value.contains('=') {
+        data = Some(value);
+    } else {
+        for clause in value.split(';') {
+            let (key, setting) = clause
+                .split_once('=')
+                .ok_or("--sparkline settings require name=value")?;
+            if !seen.insert(key) {
+                return Err(format!("--sparkline duplicate setting '{key}'"));
+            }
+            let number = |text: &str| -> Result<f64, String> {
+                let n = text.parse::<f64>().map_err(|_| {
+                    "--sparkline values and limits must be finite numbers".to_owned()
+                })?;
+                if !n.is_finite() {
+                    return Err("--sparkline values and limits must be finite numbers".into());
+                }
+                Ok(n)
+            };
+            match key {
+                "data" => data = Some(setting),
+                "label" if !setting.trim().is_empty() && !setting.contains(['\n', '\r']) => {
+                    chart.label = Some(setting.trim().to_owned())
+                }
+                "min" => chart.min = Some(number(setting)?),
+                "max" => chart.max = Some(number(setting)?),
+                "endpoints" => {
+                    chart.endpoints = match setting {
+                        "true" => true,
+                        "false" => false,
+                        _ => return Err("--sparkline endpoints must be true or false".into()),
+                    }
+                }
+                "float" => chart.alignment = parse_visual_alignment(setting, "--sparkline")?,
+                _ => return Err(format!("--sparkline has invalid setting '{key}'")),
+            }
+        }
+    }
+    let data = data.ok_or("--sparkline requires data=...")?;
+    for item in data.split(',') {
+        let n = item
+            .trim()
+            .parse::<f64>()
+            .map_err(|_| "--sparkline values must be finite numbers".to_owned())?;
+        if !n.is_finite() {
+            return Err("--sparkline values must be finite numbers".into());
+        }
+        chart.values.push(n);
+    }
+    if chart.values.is_empty() {
+        return Err("--sparkline requires data".into());
+    }
+    let min = chart
+        .min
+        .unwrap_or_else(|| chart.values.iter().copied().fold(f64::INFINITY, f64::min));
+    let max = chart.max.unwrap_or_else(|| {
+        chart
+            .values
+            .iter()
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max)
+    });
+    if min > max || chart.values.iter().any(|n| *n < min || *n > max) {
+        return Err("--sparkline data must lie within its min and max".into());
+    }
+    Ok(chart)
+}
+
+fn format_sparkline(
+    chart: &Sparkline,
+    wrap_width: usize,
+    charset: Charset,
+) -> Result<String, String> {
+    let min = chart
+        .min
+        .unwrap_or_else(|| chart.values.iter().copied().fold(f64::INFINITY, f64::min));
+    let max = chart.max.unwrap_or_else(|| {
+        chart
+            .values
+            .iter()
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max)
+    });
+    let levels: Vec<char> = match charset {
+        Charset::Ascii => ".:-=+*#@",
+        Charset::Unicode => "▁▂▃▄▅▆▇█",
+    }
+    .chars()
+    .collect();
+    let rendered: String = chart
+        .values
+        .iter()
+        .map(|value| {
+            let fraction = if min == max {
+                0.5
+            } else if (max - min).is_finite() {
+                (value - min) / (max - min)
+            } else {
+                (value / 2.0 - min / 2.0) / (max / 2.0 - min / 2.0)
+            };
+            levels[((fraction.clamp(0.0, 1.0) * 7.0).round() as usize).min(7)]
+        })
+        .collect();
+    let prefix = chart
+        .label
+        .as_ref()
+        .map(|label| format!("{label}: "))
+        .unwrap_or_default();
+    let suffix = if chart.endpoints {
+        format!(
+            " ({} -> {})",
+            chart.values[0],
+            chart.values[chart.values.len() - 1]
+        )
+    } else {
+        String::new()
+    };
+    let line = format!("{prefix}{rendered}{suffix}");
+    if display_width(&line) > wrap_width {
+        return Err(
+            "--sparkline exceeds the message margin; use fewer values or a wider --wrap-width"
+                .into(),
+        );
+    }
+    Ok(align_block(&line, chart.alignment, wrap_width))
+}
+
+fn parse_progress(value: &str) -> Result<Progress, String> {
+    let mut progress = Progress {
+        fraction: 0.0,
+        width: 20,
+        label: None,
+        alignment: ChartAlignment::Center,
+    };
+    let mut selected = None;
+    let mut seen = BTreeSet::new();
+    if !value.contains('=') {
+        selected = Some(value);
+    } else {
+        for clause in value.split(';') {
+            let (key, setting) = clause
+                .split_once('=')
+                .ok_or("--progress settings require name=value")?;
+            if !seen.insert(key) {
+                return Err(format!("--progress duplicate setting '{key}'"));
+            }
+            match key {
+                "value" => selected = Some(setting),
+                "width" => progress.width = parse_chart_size(setting, "--progress", "width")?,
+                "label" if !setting.trim().is_empty() && !setting.contains(['\n', '\r']) => {
+                    progress.label = Some(setting.trim().to_owned())
+                }
+                "float" => progress.alignment = parse_visual_alignment(setting, "--progress")?,
+                _ => return Err(format!("--progress has invalid setting '{key}'")),
+            }
+        }
+    }
+    let selected = selected.ok_or("--progress requires value=...")?;
+    let number = |text: &str| -> Result<f64, String> {
+        let number = text
+            .trim()
+            .parse::<f64>()
+            .map_err(|_| "--progress needs a percentage or fraction".to_owned())?;
+        if !number.is_finite() {
+            return Err("--progress needs finite numbers".into());
+        }
+        Ok(number)
+    };
+    progress.fraction = if let Some(percent) = selected.strip_suffix('%') {
+        number(percent)? / 100.0
+    } else if let Some((numerator, denominator)) = selected.split_once('/') {
+        let denominator = number(denominator)?;
+        if denominator <= 0.0 {
+            return Err("--progress denominator must be positive".into());
+        }
+        number(numerator)? / denominator
+    } else {
+        return Err("--progress needs a percentage or fraction".into());
+    };
+    if !progress.fraction.is_finite() || !(0.0..=1.0).contains(&progress.fraction) {
+        return Err("--progress must be between zero and 100%".into());
+    }
+    Ok(progress)
+}
+
+fn parse_styled_text(
+    value: &str,
+    option: &str,
+    text_key: &str,
+    default_style: &str,
+) -> Result<StyledText, String> {
+    let mut result = StyledText {
+        text: String::new(),
+        style: default_style.to_owned(),
+        label: None,
+        width: None,
+        alignment: ChartAlignment::Center,
+    };
+    let mut seen = BTreeSet::new();
+    if !value.contains('=') {
+        result.text = value.trim().to_owned();
+    } else {
+        for clause in value.split(';') {
+            let (key, setting) = clause
+                .split_once('=')
+                .ok_or_else(|| format!("{option} settings require name=value"))?;
+            if !seen.insert(key) {
+                return Err(format!("{option} duplicate setting '{key}'"));
+            }
+            match key {
+                key if key == text_key => result.text = setting.trim().to_owned(),
+                "style" => result.style = setting.to_owned(),
+                "label"
+                    if option == "--stamp"
+                        && !setting.trim().is_empty()
+                        && !setting.contains(['\n', '\r']) =>
+                {
+                    result.label = Some(setting.trim().to_owned())
+                }
+                "width" => result.width = Some(parse_chart_size(setting, option, "width")?),
+                "float" => result.alignment = parse_visual_alignment(setting, option)?,
+                _ => return Err(format!("{option} has unknown setting '{key}'")),
+            }
+        }
+    }
+    if result.text.is_empty() || result.text.contains(['\n', '\r']) {
+        return Err(format!("{option} needs non-empty single-line {text_key}"));
+    }
+    Ok(result)
+}
+
+fn format_banner(
+    banner: &StyledText,
+    wrap_width: usize,
+    charset: Charset,
+) -> Result<String, String> {
+    let text_width = display_width(&banner.text);
+    let width = banner
+        .width
+        .unwrap_or((text_width + 4).max(20).min(wrap_width));
+    if width > wrap_width || width < text_width + if banner.style == "box" { 4 } else { 0 } {
+        return Err("--banner width must fit the text and message margin".into());
+    }
+    let palette = charset.palette();
+    let centered = pad_centered(
+        &banner.text,
+        if banner.style == "box" {
+            width - 2
+        } else {
+            width
+        },
+    );
+    let rendered = match banner.style.as_str() {
+        "plain" => centered,
+        "box" => format!(
+            "{}{}{}\n{}{}{}\n{}{}{}",
+            palette.top.0,
+            palette.horizontal.repeat(width - 2),
+            palette.top.2,
+            palette.vertical,
+            centered,
+            palette.vertical,
+            palette.bottom.0,
+            palette.horizontal.repeat(width - 2),
+            palette.bottom.2
+        ),
+        "double" | "heavy" | "retro" => {
+            let mark = match (banner.style.as_str(), charset) {
+                ("double", Charset::Unicode) => "═",
+                ("heavy", Charset::Unicode) => "━",
+                ("double", _) => "=",
+                ("heavy", _) => "#",
+                _ => "*",
+            };
+            format!(
+                "{}\n{}\n{}",
+                mark.repeat(width),
+                centered,
+                mark.repeat(width)
+            )
+        }
+        _ => return Err("--banner style must be plain, box, double, heavy, or retro".into()),
+    };
+    Ok(align_block(&rendered, banner.alignment, wrap_width))
+}
+
+fn format_badges(
+    badges: &StyledText,
+    wrap_width: usize,
+    charset: Charset,
+) -> Result<String, String> {
+    if badges.width.is_some() {
+        return Err("--badges does not accept width".into());
+    }
+    let labels = badges.text.split(',').map(str::trim).collect::<Vec<_>>();
+    if labels.iter().any(|label| label.is_empty()) {
+        return Err("--badges labels cannot be empty".into());
+    }
+    let palette = charset.palette();
+    let rendered = match badges.style.as_str() {
+        "plain" => labels
+            .iter()
+            .map(|label| format!("[ {label} ]"))
+            .collect::<Vec<_>>()
+            .join(" "),
+        "boxed" => {
+            let top = labels
+                .iter()
+                .map(|label| {
+                    format!(
+                        "{}{}{}",
+                        palette.top.0,
+                        palette.horizontal.repeat(display_width(label) + 2),
+                        palette.top.2
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            let middle = labels
+                .iter()
+                .map(|label| format!("{} {label} {}", palette.vertical, palette.vertical))
+                .collect::<Vec<_>>()
+                .join(" ");
+            let bottom = labels
+                .iter()
+                .map(|label| {
+                    format!(
+                        "{}{}{}",
+                        palette.bottom.0,
+                        palette.horizontal.repeat(display_width(label) + 2),
+                        palette.bottom.2
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!("{top}\n{middle}\n{bottom}")
+        }
+        _ => return Err("--badges style must be plain or boxed".into()),
+    };
+    if rendered
+        .lines()
+        .any(|line| display_width(line) > wrap_width)
+    {
+        return Err("--badges exceeds the message margin".into());
+    }
+    Ok(align_block(&rendered, badges.alignment, wrap_width))
+}
+
+fn format_stamp(stamp: &StyledText, wrap_width: usize) -> Result<String, String> {
+    if stamp.width.is_some() || stamp.style != "plain" {
+        return Err("--stamp accepts name, label, and float settings".into());
+    }
+    let (art, default_label) = match stamp.text.as_str() {
+        "approved" | "ok" => ("( OK )", "APPROVED"),
+        "warning" | "danger" => ("/ ! \\", "WARNING"),
+        "tests" | "tests-passed" => ("[x x]", "TESTS PASSED"),
+        "achievement" => ("< * >", "ACHIEVEMENT UNLOCKED"),
+        "bug" => ("x(#)x", "BUG ELIMINATED"),
+        "rip" => ("  _|_\n |RIP|\n |___|", "RIP"),
+        "deprecated" => ("[ - ]", "DEPRECATED"),
+        "performance" => ("->>>", "PERFORMANCE"),
+        _ => return Err("--stamp name must be approved, warning, tests, achievement, bug, rip, deprecated, or performance".into()),
+    };
+    let label = stamp.label.as_deref().unwrap_or(default_label);
+    let width = art
+        .lines()
+        .map(display_width)
+        .chain(std::iter::once(display_width(label)))
+        .max()
+        .unwrap_or(0);
+    if width > wrap_width {
+        return Err("--stamp exceeds the message margin".into());
+    }
+    let rendered = art
+        .lines()
+        .chain(std::iter::once(label))
+        .map(|line| pad_centered(line, width))
+        .collect::<Vec<_>>()
+        .join("\n");
+    Ok(align_block(&rendered, stamp.alignment, wrap_width))
+}
+
+fn format_progress(
+    progress: &Progress,
+    wrap_width: usize,
+    charset: Charset,
+) -> Result<String, String> {
+    let filled = (progress.fraction * progress.width as f64).round() as usize;
+    let palette = charset.palette();
+    let empty = if charset == Charset::Ascii {
+        "."
+    } else {
+        "░"
+    };
+    let prefix = progress
+        .label
+        .as_ref()
+        .map(|label| format!("{label}: "))
+        .unwrap_or_default();
+    let line = format!(
+        "{prefix}[{}{}] {:.0}%",
+        palette.bar.repeat(filled),
+        empty.repeat(progress.width - filled),
+        progress.fraction * 100.0
+    );
+    if display_width(&line) > wrap_width {
+        return Err(
+            "--progress exceeds the message margin; choose a smaller width or wider --wrap-width"
+                .into(),
+        );
+    }
+    Ok(align_block(&line, progress.alignment, wrap_width))
 }
 
 fn parse_chart_size(value: &str, option: &str, setting: &str) -> Result<usize, String> {
@@ -2054,16 +2723,9 @@ fn parse_bubble(
         }
         match key {
             "speaker" => {
-                speaker = Some(match setting {
-                    "cat" => BubbleSpeaker::Cat,
-                    "dog" => BubbleSpeaker::Dog,
-                    "stick-figure" => BubbleSpeaker::StickFigure,
-                    _ => {
-                        return Err(
-                            "--bubble speaker must be 'cat', 'dog', or 'stick-figure'".into()
-                        )
-                    }
-                });
+                speaker = Some(bubble_speaker(setting).ok_or_else(|| {
+                    "--bubble speaker must be cat, dog, stick-figure, cow, robot, owl, dragon, penguin, duck, or ghost".to_owned()
+                })?);
             }
             "style" => {
                 style = Some(match setting {
@@ -2136,10 +2798,17 @@ fn parse_bubble(
 }
 
 fn random_bubble_speaker(rng: &mut BubbleRng) -> BubbleSpeaker {
-    match rng.index(3) {
+    match rng.index(10) {
         0 => BubbleSpeaker::Cat,
         1 => BubbleSpeaker::Dog,
-        _ => BubbleSpeaker::StickFigure,
+        2 => BubbleSpeaker::StickFigure,
+        3 => BubbleSpeaker::Cow,
+        4 => BubbleSpeaker::Robot,
+        5 => BubbleSpeaker::Owl,
+        6 => BubbleSpeaker::Dragon,
+        7 => BubbleSpeaker::Penguin,
+        8 => BubbleSpeaker::Duck,
+        _ => BubbleSpeaker::Ghost,
     }
 }
 
@@ -2167,35 +2836,52 @@ fn random_chart_alignment(rng: &mut BubbleRng) -> ChartAlignment {
     }
 }
 
-fn format_bar_chart(chart: &BarChart, wrap_width: usize) -> String {
+fn format_bar_chart(chart: &BarChart, wrap_width: usize, charset: Charset) -> String {
     let rendered = match chart.orientation {
-        ChartOrientation::Horizontal => format_horizontal_chart(chart),
-        ChartOrientation::Vertical => format_vertical_chart(chart),
+        ChartOrientation::Horizontal => format_horizontal_chart(chart, charset),
+        ChartOrientation::Vertical => format_vertical_chart(chart, charset),
     };
     align_block(&rendered, chart.alignment, wrap_width)
 }
 
-fn format_flow_chart(chart: &FlowChart, wrap_width: usize) -> String {
+fn format_flow_chart(chart: &FlowChart, wrap_width: usize, charset: Charset) -> String {
+    let palette = charset.palette();
     let box_width = chart
         .steps
         .iter()
         .map(|step| display_width(step))
         .max()
         .unwrap_or(0);
-    let border = format!("+{}+", "-".repeat(box_width + 2));
+    let top = format!(
+        "{}{}{}",
+        palette.top.0,
+        palette.horizontal.repeat(box_width + 2),
+        palette.top.2
+    );
+    let bottom = format!(
+        "{}{}{}",
+        palette.bottom.0,
+        palette.horizontal.repeat(box_width + 2),
+        palette.bottom.2
+    );
     let render_box = |step: &str| {
         (
-            border.clone(),
-            format!("| {} |", pad_centered(step, box_width)),
-            border.clone(),
+            top.clone(),
+            format!(
+                "{} {} {}",
+                palette.vertical,
+                pad_centered(step, box_width),
+                palette.vertical
+            ),
+            bottom.clone(),
         )
     };
     let rendered = match chart.orientation {
         ChartOrientation::Horizontal => {
             let boxes = chart.steps.iter().map(|step| render_box(step));
             let boxes = boxes.collect::<Vec<_>>();
-            let arrow = " --> ";
-            let spacer = " ".repeat(arrow.len());
+            let arrow = palette.arrow_right;
+            let spacer = " ".repeat(display_width(arrow));
             [
                 boxes
                     .iter()
@@ -2222,8 +2908,8 @@ fn format_flow_chart(chart: &FlowChart, wrap_width: usize) -> String {
                 lines.extend([top, middle, bottom]);
                 if index + 1 < chart.steps.len() {
                     let connector_indent = " ".repeat(box_width / 2 + 2);
-                    lines.push(format!("{connector_indent}|"));
-                    lines.push(format!("{connector_indent}v"));
+                    lines.push(format!("{connector_indent}{}", palette.vertical));
+                    lines.push(format!("{connector_indent}{}", palette.arrow_down));
                 }
             }
             lines.join("\n")
@@ -2243,6 +2929,13 @@ fn format_bubble(bubble: &Bubble, wrap_width: usize) -> String {
         BubbleSpeaker::Cat => 3,
         BubbleSpeaker::Dog => 4,
         BubbleSpeaker::StickFigure => 2,
+        BubbleSpeaker::Cow => 3,
+        BubbleSpeaker::Robot => 3,
+        BubbleSpeaker::Owl => 3,
+        BubbleSpeaker::Dragon => 4,
+        BubbleSpeaker::Penguin => 3,
+        BubbleSpeaker::Duck => 3,
+        BubbleSpeaker::Ghost => 3,
     };
     // Leave room for the frame and either the horizontal connector/avatar or
     // the part of an avatar that extends beyond a bubble above it.
@@ -2324,10 +3017,21 @@ fn format_bubble(bubble: &Bubble, wrap_width: usize) -> String {
             let bubble_top_padding = (height - lines.len()) / 2;
             let top_padding = (height - avatar.len()) / 2;
             let bubble_row = bubble_top_padding + lines.len() / 2;
+            let compact_thought = bubble.style == BubbleStyle::Thought
+                && !matches!(
+                    bubble.speaker,
+                    BubbleSpeaker::Cat | BubbleSpeaker::Dog | BubbleSpeaker::StickFigure
+                )
+                && avatar_width + bubble_width + 7 > wrap_width;
             let connector = match (bubble.style, bubble.speaker_side) {
                 (BubbleStyle::Speech, SpeakerSide::Left) => " <-- ",
                 (BubbleStyle::Speech, SpeakerSide::Right) => " --> ",
                 (BubbleStyle::Speech, SpeakerSide::Below) => unreachable!(),
+                (BubbleStyle::Thought, SpeakerSide::Left | SpeakerSide::Right)
+                    if compact_thought =>
+                {
+                    " o "
+                }
                 (BubbleStyle::Thought, SpeakerSide::Left) => " . o O ",
                 (BubbleStyle::Thought, SpeakerSide::Right) => " O o . ",
                 (BubbleStyle::Thought, SpeakerSide::Below) => unreachable!(),
@@ -2386,6 +3090,13 @@ fn bubble_avatar(speaker: BubbleSpeaker) -> &'static [&'static str] {
             "/_____/   U",
         ],
         BubbleSpeaker::StickFigure => &["  O", " /|\\", " / \\"],
+        BubbleSpeaker::Cow => &[" ^__^", " (oo)\\__", " (__)\\  )", "     ||||"],
+        BubbleSpeaker::Robot => &[" .---.", " |o o|", " |_-_|", " /| |\\"],
+        BubbleSpeaker::Owl => &[" ,_,", " (O,O)", " (   )", "  \" \""],
+        BubbleSpeaker::Dragon => &[r"  /\ /\", r" / o o \", "(   ^   )", r" \__V__/"],
+        BubbleSpeaker::Penguin => &["  .--.", " (o  o)", " /|  |\\", "  _||_"],
+        BubbleSpeaker::Duck => &["  __", " (o )>", " /  )", " `--'"],
+        BubbleSpeaker::Ghost => &[" .-.", "(o o)", "| O |", "|/\\/|"],
     }
 }
 
@@ -2404,7 +3115,8 @@ fn align_block(block: &str, alignment: ChartAlignment, wrap_width: usize) -> Str
         .join("\n")
 }
 
-fn format_horizontal_chart(chart: &BarChart) -> String {
+fn format_horizontal_chart(chart: &BarChart, charset: Charset) -> String {
+    let palette = charset.palette();
     let label_width = chart
         .entries
         .iter()
@@ -2427,16 +3139,18 @@ fn format_horizontal_chart(chart: &BarChart) -> String {
                 (((*value as u128 * chart.size as u128) / max_value as u128) as usize).max(1)
             };
             format!(
-                "{} | {} {value}",
+                "{} {} {} {value}",
                 pad_left_aligned(label, label_width),
-                "#".repeat(bar_length)
+                palette.vertical,
+                palette.bar.repeat(bar_length)
             )
         })
         .collect::<Vec<_>>()
         .join("\n")
 }
 
-fn format_vertical_chart(chart: &BarChart) -> String {
+fn format_vertical_chart(chart: &BarChart, charset: Charset) -> String {
+    let palette = charset.palette();
     let max_value = chart
         .entries
         .iter()
@@ -2470,7 +3184,7 @@ fn format_vertical_chart(chart: &BarChart) -> String {
                 let center = cell_width / 2;
                 let mut column = vec![' '; cell_width];
                 if level <= bar_height {
-                    column[center] = '#';
+                    column[center] = palette.bar.chars().next().unwrap_or('#');
                 }
                 column.into_iter().collect::<String>()
             })
@@ -2481,14 +3195,25 @@ fn format_vertical_chart(chart: &BarChart) -> String {
     let mut lines = Vec::new();
     for level in (1..=chart.size).rev() {
         let axis = if level == chart.size {
-            format!("{:>axis_width$} | ", max_value)
+            format!("{:>axis_width$} {} ", max_value, palette.vertical)
         } else {
-            format!("{:>axis_width$} | ", "")
+            format!("{:>axis_width$} {} ", "", palette.vertical)
         };
         lines.push(format!("{axis}{}", bar_row(level)));
     }
-    let baseline = "-".repeat(chart.entries.len() * (cell_width + 1) - 1);
-    lines.push(format!("{:>axis_width$} +-{baseline}", "0"));
+    let baseline = palette
+        .horizontal
+        .repeat(chart.entries.len() * (cell_width + 1) - 1);
+    lines.push(format!(
+        "{:>axis_width$} {}{}{baseline}",
+        "0",
+        if charset == Charset::Ascii {
+            "+"
+        } else {
+            "└"
+        },
+        palette.horizontal
+    ));
     let labels = chart
         .entries
         .iter()
@@ -2518,6 +3243,8 @@ fn format_list(items: &[ListEntry], wrap_width: usize) -> String {
                 format!("{}. ", counters[item.depth])
             }
             ListKind::Bullets => "* ".to_owned(),
+            ListKind::Check(true) => "[x] ".to_owned(),
+            ListKind::Check(false) => "[ ] ".to_owned(),
         };
         let indent = "  ".repeat(item.depth);
         let first_prefix = format!("{indent}{marker}");
@@ -2607,6 +3334,7 @@ fn format_message(
     sections: Vec<Section>,
     footers: BTreeMap<usize, String>,
     wrap_width: usize,
+    charset: Charset,
 ) -> Result<String, String> {
     let mut parts = Vec::new();
     if let Some(subject) = subject {
@@ -2631,10 +3359,15 @@ fn format_message(
             Section::Fields(fields) => format_fields(&fields, wrap_width),
             Section::Note(text) => format_callout("Note", &text, wrap_width),
             Section::Warning(text) => format_callout("Warning", &text, wrap_width),
-            Section::Table { head, rows } => format_table(&head, &rows),
-            Section::BarChart(chart) => format_bar_chart(&chart, wrap_width),
-            Section::FlowChart(chart) => format_flow_chart(&chart, wrap_width),
-            Section::FlowDiagram(diagram) => format_flow_diagram(&diagram, wrap_width)?,
+            Section::Table { head, rows } => format_table(&head, &rows, charset),
+            Section::BarChart(chart) => format_bar_chart(&chart, wrap_width, charset),
+            Section::Sparkline(chart) => format_sparkline(&chart, wrap_width, charset)?,
+            Section::Progress(progress) => format_progress(&progress, wrap_width, charset)?,
+            Section::Banner(banner) => format_banner(&banner, wrap_width, charset)?,
+            Section::Badges(badges) => format_badges(&badges, wrap_width, charset)?,
+            Section::Stamp(stamp) => format_stamp(&stamp, wrap_width)?,
+            Section::FlowChart(chart) => format_flow_chart(&chart, wrap_width, charset),
+            Section::FlowDiagram(diagram) => format_flow_diagram(&diagram, wrap_width, charset)?,
             Section::Bubble(bubble) => format_bubble(&bubble, wrap_width),
             Section::List(items) => format_list(&items, wrap_width),
         };
@@ -2679,7 +3412,11 @@ fn format_message(
     Ok(parts.join("\n\n") + "\n")
 }
 
-fn format_flow_diagram(diagram: &FlowDiagram, wrap_width: usize) -> Result<String, String> {
+fn format_flow_diagram(
+    diagram: &FlowDiagram,
+    wrap_width: usize,
+    charset: Charset,
+) -> Result<String, String> {
     if diagram.node_ids.len() < 2 {
         return Err("--flow-chart requires at least two declared nodes".into());
     }
@@ -2702,7 +3439,7 @@ fn format_flow_diagram(diagram: &FlowDiagram, wrap_width: usize) -> Result<Strin
     let mut encode = |label: &str| -> Result<String, String> {
         let mut encoded = String::new();
         for grapheme in label.graphemes(true) {
-            if grapheme.is_ascii() {
+            if grapheme.is_ascii() && (charset == Charset::Ascii || grapheme == " ") {
                 encoded.push_str(grapheme);
                 continue;
             }
@@ -2711,7 +3448,14 @@ fn format_flow_diagram(diagram: &FlowDiagram, wrap_width: usize) -> Result<Strin
             let placeholder = char::from_u32(0xf0001 + index)
                 .filter(|ch| *ch <= '\u{ffffd}')
                 .ok_or_else(|| "too many flowchart characters".to_owned())?;
-            replacements.insert(placeholder, grapheme.to_owned());
+            // A standalone combining mark has no terminal width, but the
+            // grid still needs a cell for it. Keep that cell as a space.
+            let restored = if display_width(grapheme) == 0 {
+                format!("{grapheme} ")
+            } else {
+                grapheme.to_owned()
+            };
+            replacements.insert(placeholder, restored);
             encoded.push(placeholder);
             for _ in 1..display_width(grapheme) {
                 encoded.push(FILLER);
@@ -2780,6 +3524,11 @@ fn format_flow_diagram(diagram: &FlowDiagram, wrap_width: usize) -> Result<Strin
     };
     let rendered = to_ascii_diagram(rendered.trim_end());
     let rendered = style_flow_nodes(&rendered, &diagram.nodes);
+    let rendered = if charset == Charset::Unicode {
+        unicode_flow_diagram(&rendered)
+    } else {
+        rendered
+    };
     let mut decoded = String::new();
     for ch in rendered.chars() {
         if ch == FILLER {
@@ -2792,6 +3541,57 @@ fn format_flow_diagram(diagram: &FlowDiagram, wrap_width: usize) -> Result<Strin
         }
     }
     Ok(align_block(&decoded, diagram.alignment, wrap_width))
+}
+
+fn unicode_flow_diagram(rendered: &str) -> String {
+    let rows: Vec<Vec<char>> = rendered
+        .lines()
+        .map(|line| line.chars().collect())
+        .collect();
+    let at = |row: isize, col: isize| -> Option<char> {
+        if row < 0 || col < 0 {
+            return None;
+        }
+        rows.get(row as usize)
+            .and_then(|line| line.get(col as usize))
+            .copied()
+    };
+    rows.iter()
+        .enumerate()
+        .map(|(row, line)| {
+            line.iter()
+                .enumerate()
+                .map(|(col, ch)| match ch {
+                    '+' => {
+                        let (row, col) = (row as isize, col as isize);
+                        let left = matches!(at(row, col - 1), Some('-' | '+' | '<' | '>'));
+                        let right = matches!(at(row, col + 1), Some('-' | '+' | '<' | '>'));
+                        let up = matches!(at(row - 1, col), Some('|' | '+' | '^' | 'v'));
+                        let down = matches!(at(row + 1, col), Some('|' | '+' | '^' | 'v'));
+                        match (left, right, up, down) {
+                            (false, true, false, true) => '┌',
+                            (true, false, false, true) => '┐',
+                            (false, true, true, false) => '└',
+                            (true, false, true, false) => '┘',
+                            (true, true, false, true) => '┬',
+                            (true, true, true, false) => '┴',
+                            (false, true, true, true) => '├',
+                            (true, false, true, true) => '┤',
+                            _ => '┼',
+                        }
+                    }
+                    '-' => '─',
+                    '|' => '│',
+                    '>' => '▶',
+                    '<' => '◀',
+                    '^' => '▲',
+                    'v' => '▼',
+                    other => *other,
+                })
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn create_message_file(message: &str) -> io::Result<PathBuf> {
@@ -2822,7 +3622,12 @@ fn create_message_file(message: &str) -> io::Result<PathBuf> {
 }
 
 fn run_inner() -> Result<ExitCode, String> {
-    let (output_target, args) = extract_output_option(env::args_os().skip(1).collect())?;
+    let args: Vec<_> = env::args_os().skip(1).collect();
+    if let Some(result) = agent_usage::handle(&args) {
+        result?;
+        return Ok(ExitCode::SUCCESS);
+    }
+    let (output_target, args) = extract_output_option(args)?;
     let (message, git_args) = compose(args)?;
     if let Some(output_target) = output_target {
         if !git_args.is_empty() {
@@ -2873,6 +3678,62 @@ fn run_inner() -> Result<ExitCode, String> {
     }
 }
 
+fn run_compose_text_inner() -> Result<ExitCode, String> {
+    let args: Vec<_> = env::args_os().skip(1).collect();
+    if let Some(result) = agent_usage::handle(&args) {
+        result?;
+        return Ok(ExitCode::SUCCESS);
+    }
+    if args.len() == 1 {
+        match args[0].to_str() {
+            Some("-h" | "--help" | "--help=short" | "--help=long" | "--man") => {
+                println!("{}", include_str!("help/compose-text.txt").trim_end());
+                return Ok(ExitCode::SUCCESS);
+            }
+            Some("--version") => {
+                println!("compose-text {}", env!("CARGO_PKG_VERSION"));
+                return Ok(ExitCode::SUCCESS);
+            }
+            Some(value) if value.starts_with("--help=") => {
+                let topic = &value["--help=".len()..];
+                let help = topic_help(topic)?.replace(
+                    "Use --help=long for the complete guide.",
+                    "Use git-compose-commit --help for the complete guide.",
+                );
+                println!("Some examples use git-compose-commit; omit Git options for compose-text.\n\n{help}");
+                return Ok(ExitCode::SUCCESS);
+            }
+            _ => {}
+        }
+    }
+    let (target, args) = extract_output_option(args)?;
+    let (message, git_args) = compose(args)?;
+    if !git_args.is_empty() {
+        return Err("compose-text accepts message options only, not Git options or paths".into());
+    }
+    match target.unwrap_or(OutputTarget::Stdout) {
+        OutputTarget::File(path) => fs::write(&path, message).map_err(|error| {
+            format!("could not write {}: {error}", PathBuf::from(path).display())
+        })?,
+        OutputTarget::Stdout => io::stdout()
+            .write_all(message.as_bytes())
+            .map_err(|error| format!("could not write standard output: {error}"))?,
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Compose text to stdout or a file without invoking Git.
+pub fn run_compose_text() -> ExitCode {
+    match run_compose_text_inner() {
+        Ok(code) => code,
+        Err(error) => {
+            eprintln!("compose-text: {error}");
+            eprintln!("Try 'compose-text --help' for details.");
+            ExitCode::from(2)
+        }
+    }
+}
+
 /// Assemble a commit message and return the arguments to forward to `git commit`.
 pub fn compose(args: Vec<OsString>) -> Result<(String, Vec<OsString>), String> {
     let help_requested = args
@@ -2893,9 +3754,10 @@ pub fn compose(args: Vec<OsString>) -> Result<(String, Vec<OsString>), String> {
         sections,
         footers,
         wrap_width,
+        charset,
         git_args,
     } = parse_args(args, &config)?;
-    let message = format_message(subject, sections, footers, wrap_width)?;
+    let message = format_message(subject, sections, footers, wrap_width, charset)?;
     Ok((message, git_args))
 }
 

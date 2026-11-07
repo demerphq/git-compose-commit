@@ -1,0 +1,18 @@
+compose-text - build formatted text without invoking Git
+
+Usage: compose-text [MESSAGE OPTIONS] [--output FILE | --stdout]
+
+Writes the composed text to standard output by default. --output FILE writes
+to a file instead; --stdout makes the default explicit. Git options and paths
+are not accepted. Use git-compose-commit when you want to create a commit.
+
+Example:
+  compose-text --subject 'Refresh cache' --text 'Update readers.'
+
+Message options include --subject, --text, --detail, --line, --field, --note,
+--warning, --wrap-width, tables, lists, footers, charts, flowcharts and bubbles.
+Use --charset=unicode to opt into Unicode for tables and simple charts.
+Use --help=TOPIC for the shared reference and examples (which show the Git
+wrapper), or git-compose-commit --help for the complete guide.
+
+Agent skills: --agent-usage-list-skills and --agent-usage-show-skill=NAME
