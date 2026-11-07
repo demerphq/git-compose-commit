@@ -53,7 +53,7 @@ class DistributionTests(unittest.TestCase):
                 subprocess.run(["python3", "scripts/package-release.py", "--version", VERSION,
                                 "--target", target, "--binary", str(BINARY),
                                 "--text-binary", str(TEXT_BINARY), "--out", str(dist)],
-                               cwd=ROOT, check=True, capture_output=True)
+                               cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
             subprocess.run(["python3", "scripts/validate-release.py", str(dist)],
                            cwd=ROOT, check=True, capture_output=True)
             tar_path = dist / f"git-compose-commit-v{VERSION}-x86_64-unknown-linux-musl.tar.gz"

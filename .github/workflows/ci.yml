@@ -24,6 +24,8 @@ jobs:
           components: clippy, rustfmt
       - name: Install Graphviz
         run: sudo apt-get update && sudo apt-get install -y graphviz
+      - name: Fetch dependencies for all release targets
+        run: cargo fetch --locked
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Check Clippy
