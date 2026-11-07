@@ -6,6 +6,7 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
 use std::sync::atomic::{AtomicU64, Ordering};
+use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 const WRAP_WIDTH: usize = 72;
@@ -134,7 +135,7 @@ struct FlowChart {
     steps: Vec<String>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct FlowDiagram {
     direction: String,
     alignment: ChartAlignment,
@@ -145,14 +146,14 @@ struct FlowDiagram {
     node_ids: BTreeSet<String>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct FlowNode {
     id: String,
     label: String,
     shape: FlowNodeShape,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct FlowEdge {
     from: String,
     to: String,
@@ -2693,6 +2694,42 @@ fn format_flow_diagram(diagram: &FlowDiagram, wrap_width: usize) -> Result<Strin
         }
     }
 
+    // The flowchart grid stores one character per cell. Give each non-ASCII
+    // grapheme a placeholder and reserve its remaining display cells; restore
+    // the original text after routing and styling have finished.
+    const FILLER: char = '\u{f0000}';
+    let mut replacements = BTreeMap::new();
+    let mut encode = |label: &str| -> Result<String, String> {
+        let mut encoded = String::new();
+        for grapheme in label.graphemes(true) {
+            if grapheme.is_ascii() {
+                encoded.push_str(grapheme);
+                continue;
+            }
+            let index = u32::try_from(replacements.len())
+                .map_err(|_| "too many distinct flowchart characters".to_owned())?;
+            let placeholder = char::from_u32(0xf0001 + index)
+                .filter(|ch| *ch <= '\u{ffffd}')
+                .ok_or_else(|| "too many flowchart characters".to_owned())?;
+            replacements.insert(placeholder, grapheme.to_owned());
+            encoded.push(placeholder);
+            for _ in 1..display_width(grapheme) {
+                encoded.push(FILLER);
+            }
+        }
+        Ok(encoded)
+    };
+    let mut encoded_diagram = diagram.clone();
+    for node in &mut encoded_diagram.nodes {
+        node.label = encode(&node.label)?;
+    }
+    for edge in &mut encoded_diagram.edges {
+        if let Some(label) = &mut edge.label {
+            *label = encode(label)?;
+        }
+    }
+    let diagram = &encoded_diagram;
+
     let mut dot = format!(
         "digraph {{\n    graph [rankdir={}, nodesep={}, ranksep={}];\n",
         diagram.direction, diagram.node_sep, diagram.rank_sep
@@ -2743,7 +2780,18 @@ fn format_flow_diagram(diagram: &FlowDiagram, wrap_width: usize) -> Result<Strin
     };
     let rendered = to_ascii_diagram(rendered.trim_end());
     let rendered = style_flow_nodes(&rendered, &diagram.nodes);
-    Ok(align_block(&rendered, diagram.alignment, wrap_width))
+    let mut decoded = String::new();
+    for ch in rendered.chars() {
+        if ch == FILLER {
+            continue;
+        }
+        if let Some(grapheme) = replacements.get(&ch) {
+            decoded.push_str(grapheme);
+        } else {
+            decoded.push(ch);
+        }
+    }
+    Ok(align_block(&decoded, diagram.alignment, wrap_width))
 }
 
 fn create_message_file(message: &str) -> io::Result<PathBuf> {

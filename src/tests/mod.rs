@@ -631,6 +631,56 @@ fn unicode_display_columns_align_messages_and_diagrams() {
 }
 
 #[test]
+fn branching_flowchart_aligns_unicode_labels() {
+    for direction in ["horizontal", "vertical"] {
+        let chart = message(&[
+            &format!("--flow-chart=direction={direction};float=left"),
+            "--flow-terminal=start:猫",
+            "--flow-decision=check:e\u{301}?",
+            "--flow-node=done:好的",
+            "--flow-edge=start -> check",
+            "--flow-edge=check -> done [label=\"猫\"]",
+        ]);
+        let lines: Vec<_> = chart.lines().collect();
+        for label in ["猫", "e\u{301}?", "好的"] {
+            let row = lines
+                .iter()
+                .position(|line| line.contains(label) && (line.contains('|') || line.contains('(')))
+                .unwrap();
+            let label_start = lines[row].find(label).unwrap();
+            let left = lines[row][..label_start].rfind(['|', '(']).unwrap();
+            let after_label = label_start + label.len();
+            let right = after_label + lines[row][after_label..].find(['|', ')']).unwrap();
+            let left_col = display_width(&lines[row][..left]);
+            let right_col = display_width(&lines[row][..right]);
+            assert_eq!(
+                lines[row - 1].chars().nth(left_col),
+                Some(if label == "猫" {
+                    '('
+                } else if label == "e\u{301}?" {
+                    '/'
+                } else {
+                    '+'
+                }),
+                "{chart}"
+            );
+            assert_eq!(
+                lines[row - 1].chars().nth(right_col),
+                Some(if label == "猫" {
+                    ')'
+                } else if label == "e\u{301}?" {
+                    '\\'
+                } else {
+                    '+'
+                }),
+                "{chart}"
+            );
+        }
+        assert!(chart.contains("猫"));
+    }
+}
+
+#[test]
 fn random_seed_reproduces_choices_and_is_not_forwarded_to_git() {
     let first = compose(args(&[
         "--rand-seed",
