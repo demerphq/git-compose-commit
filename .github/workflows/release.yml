@@ -77,6 +77,11 @@ jobs:
           export GIT_COMPOSE_COMMIT_RELEASE_BASE=http://127.0.0.1:18743
           export GIT_COMPOSE_COMMIT_INSTALL_DIR="$RUNNER_TEMP/installed-bin"
           sh scripts/install.sh "v$VERSION"
+          if sh scripts/install.sh "v$VERSION"; then
+            echo 'Installer unexpectedly overwrote existing binaries' >&2
+            exit 1
+          fi
+          sh scripts/install.sh --force "v$VERSION"
           cmp "target/$TARGET/release/git-compose-commit" "$GIT_COMPOSE_COMMIT_INSTALL_DIR/git-compose-commit"
           cmp "target/$TARGET/release/cli-compose-text" "$GIT_COMPOSE_COMMIT_INSTALL_DIR/cli-compose-text"
           "$GIT_COMPOSE_COMMIT_INSTALL_DIR/git-compose-commit" --version
@@ -94,6 +99,11 @@ jobs:
             $env:GIT_COMPOSE_COMMIT_RELEASE_BASE = 'http://127.0.0.1:18743'
             $installDir = Join-Path $env:RUNNER_TEMP 'installed-bin'
             ./scripts/install.ps1 -Version "v$version" -InstallDir $installDir
+            $refused = $false
+            try { ./scripts/install.ps1 -Version "v$version" -InstallDir $installDir }
+            catch { $refused = $true }
+            if (-not $refused) { throw 'Installer unexpectedly overwrote existing binaries' }
+            ./scripts/install.ps1 -Version "v$version" -InstallDir $installDir -Force
             $built = Get-FileHash target/x86_64-pc-windows-msvc/release/git-compose-commit.exe
             $installed = Get-FileHash (Join-Path $installDir 'git-compose-commit.exe')
             if ($built.Hash -ne $installed.Hash) { throw 'Installed binary differs from build' }

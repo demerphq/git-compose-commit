@@ -76,7 +76,11 @@ Invoke-WebRequest https://github.com/demerphq/git-compose-commit/releases/downlo
 The shell installer writes to `~/.local/bin` by default; set
 `GIT_COMPOSE_COMMIT_INSTALL_DIR` to choose another directory. PowerShell
 accepts `-InstallDir`. Both check the archive checksum and do not require
-administrator rights or Rust. Ensure the chosen directory is on `PATH`.
+administrator rights or Rust. They refuse to replace existing executables by
+default; pass `--force` to the shell installer or `-Force` to PowerShell for a
+deliberate upgrade. They stage both files, restore earlier files if a replacement
+fails, and warn about other executables found on `PATH`. A machine failure can
+still interrupt an upgrade. Ensure the chosen directory is on `PATH`.
 
 Once published, `cargo install git-compose-commit` and
 `cargo binstall git-compose-commit` are intended alternatives. The latter

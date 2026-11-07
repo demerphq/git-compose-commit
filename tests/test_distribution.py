@@ -42,12 +42,48 @@ class DistributionTests(unittest.TestCase):
             installed = dest / "git-compose-commit"
             self.assertEqual(installed.read_bytes(), BINARY.read_bytes())
             self.assertEqual((dest / "cli-compose-text").read_bytes(), TEXT_BINARY.read_bytes())
+            conflict = subprocess.run(command, cwd=ROOT, env=env, capture_output=True, text=True)
+            self.assertNotEqual(conflict.returncode, 0)
+            self.assertIn("use --force", conflict.stderr)
+            self.assertEqual(installed.read_bytes(), BINARY.read_bytes())
+            subprocess.run(command + ["--force"], cwd=ROOT, env=env, check=True, capture_output=True)
+
+            partial = root / "partial"
+            partial.mkdir()
+            (partial / "git-compose-commit").write_bytes(b"existing")
+            partial_env = {**env, "GIT_COMPOSE_COMMIT_INSTALL_DIR": str(partial)}
+            conflict = subprocess.run(command, cwd=ROOT, env=partial_env, capture_output=True)
+            self.assertNotEqual(conflict.returncode, 0)
+            self.assertEqual((partial / "git-compose-commit").read_bytes(), b"existing")
+            self.assertFalse((partial / "cli-compose-text").exists())
+
+            link_dir = root / "links"
+            link_dir.mkdir()
+            (link_dir / "git-compose-commit").symlink_to(partial / "git-compose-commit")
+            link_env = {**env, "GIT_COMPOSE_COMMIT_INSTALL_DIR": str(link_dir)}
+            linked = subprocess.run(command + ["--force"], cwd=ROOT, env=link_env, capture_output=True)
+            self.assertNotEqual(linked.returncode, 0)
+            self.assertEqual((partial / "git-compose-commit").read_bytes(), b"existing")
+
+            installed.write_bytes(b"old git")
+            (dest / "cli-compose-text").write_bytes(b"old text")
+            shim_dir = root / "shim"
+            shim_dir.mkdir()
+            shim = shim_dir / "mv"
+            shim.write_text('#!/bin/sh\ncase "$*" in *new-cli-compose-text*) exit 1;; esac\nexec /bin/mv "$@"\n')
+            shim.chmod(0o755)
+            failure_env = {**env, "PATH": str(shim_dir) + os.pathsep + env["PATH"]}
+            failed_upgrade = subprocess.run(command + ["--force"], cwd=ROOT, env=failure_env, capture_output=True)
+            self.assertNotEqual(failed_upgrade.returncode, 0)
+            self.assertEqual(installed.read_bytes(), b"old git")
+            self.assertEqual((dest / "cli-compose-text").read_bytes(), b"old text")
+            subprocess.run(command + ["--force"], cwd=ROOT, env=env, check=True, capture_output=True)
             archive = dist / f"git-compose-commit-v{VERSION}-x86_64-unknown-linux-musl.tar.gz"
             archive.write_bytes(archive.read_bytes() + b"tampered")
             invalid = subprocess.run(["python3", "scripts/validate-release.py", str(dist)],
                                      cwd=ROOT, capture_output=True)
             self.assertNotEqual(invalid.returncode, 0)
-            failure = subprocess.run(command, cwd=ROOT, env=env, capture_output=True, text=True)
+            failure = subprocess.run(command + ["--force"], cwd=ROOT, env=env, capture_output=True, text=True)
             self.assertNotEqual(failure.returncode, 0)
             self.assertIn("Checksum mismatch", failure.stderr)
             self.assertEqual(installed.read_bytes(), BINARY.read_bytes())

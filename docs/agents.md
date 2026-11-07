@@ -17,14 +17,27 @@ git-compose-commit --agent-usage-show-skill=git-compose-commit
 
 With a POSIX shell, choose the appropriate destination from the table below.
 This installs the skill documents directly from the executable; no network
-download is needed. Review existing files first: this command overwrites them.
+download is needed. It refuses to overwrite existing skill documents or write
+through a skill-directory symlink. Review and remove an old installation
+yourself before replacing it.
 
 ```sh
-skill_dir=.agents/skills
-git-compose-commit --agent-usage-list-skills | while IFS= read -r skill; do
-  mkdir -p "$skill_dir/$skill"
-  git-compose-commit "--agent-usage-show-skill=$skill" > "$skill_dir/$skill/SKILL.md"
-done
+(
+  set -eu
+  skill_dir=.agents/skills
+  skills=$(git-compose-commit --agent-usage-list-skills)
+  for skill in $skills; do
+    if [ -L "$skill_dir/$skill" ] || [ -e "$skill_dir/$skill/SKILL.md" ] ||
+       [ -L "$skill_dir/$skill/SKILL.md" ]; then
+      echo "Already exists or is a symlink: $skill_dir/$skill" >&2
+      exit 1
+    fi
+  done
+  for skill in $skills; do
+    mkdir -p "$skill_dir/$skill"
+    (set -C; git-compose-commit "--agent-usage-show-skill=$skill" > "$skill_dir/$skill/SKILL.md")
+  done
+)
 ```
 
 | Agent | Project | User |
@@ -36,12 +49,25 @@ For PowerShell, choose the destination and run:
 
 ```powershell
 $skillDir = '.claude/skills'
-git-compose-commit --agent-usage-list-skills | ForEach-Object {
-  $directory = Join-Path $skillDir $_
+$skills = @(git-compose-commit --agent-usage-list-skills)
+if ($LASTEXITCODE -ne 0) { throw 'Could not list skills' }
+foreach ($skill in $skills) {
+  $directory = Join-Path $skillDir $skill
+  $item = Get-Item -LiteralPath $directory -Force -ErrorAction SilentlyContinue
+  if (($item -and ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) -or
+      (Test-Path -LiteralPath (Join-Path $directory 'SKILL.md'))) {
+    throw "Already exists or is a symlink: $directory"
+  }
+}
+foreach ($skill in $skills) {
+  $directory = Join-Path $skillDir $skill
   New-Item -ItemType Directory -Force $directory | Out-Null
-  $text = git-compose-commit "--agent-usage-show-skill=$_"
-  [System.IO.File]::WriteAllText((Join-Path (Resolve-Path $directory) 'SKILL.md'),
-    (($text -join "`n") + "`n"), [System.Text.UTF8Encoding]::new($false))
+  $text = git-compose-commit "--agent-usage-show-skill=$skill"
+  if ($LASTEXITCODE -ne 0) { throw "Could not export $skill" }
+  $path = Join-Path (Resolve-Path $directory) 'SKILL.md'
+  $file = [System.IO.File]::Open($path, [System.IO.FileMode]::CreateNew)
+  $writer = [System.IO.StreamWriter]::new($file, [System.Text.UTF8Encoding]::new($false))
+  try { $writer.Write(($text -join "`n") + "`n") } finally { $writer.Dispose() }
 }
 ```
 
@@ -55,7 +81,7 @@ git-compose-commit --agent-usage-show-skill=ALL | \
 
 The extractor refuses to overwrite existing files. Set the destination to the
 agent and scope you want. The complete export includes the reference extractor
-as a supporting file in the general skill.
+as a supporting file in the Git cover skill.
 
 ## Suggested project instructions
 
