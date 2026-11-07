@@ -43,16 +43,29 @@ The wrapper also retains its `--stdout` and `--output` preview modes.
 
 ## Installation
 
-**Before the first release**, install from a checkout with a Rust toolchain:
+On macOS or Linux with Homebrew:
+
+```sh
+brew install demerphq/tap/git-compose-commit
+```
+
+With a Rust toolchain:
+
+```sh
+cargo install git-compose-commit --locked
+```
+
+You can also install from a checkout:
 
 ```sh
 cargo install --path .
 ```
 
-Release builds, installers, crates.io and Homebrew distribution are being
-prepared; they are not available until published. See [release preparation](docs/releasing.md)
-for the planned binary downloads and installation methods. Git is required.
-Graphviz's `dot` is optional and only needed for branching flowcharts.
+For Windows and other binary installation options, see the
+[releases](https://github.com/demerphq/git-compose-commit/releases) and
+[installation instructions](docs/releasing.md#installation-after-publication).
+Git is required for `git-compose-commit`. Graphviz's `dot` is optional and
+only needed for branching flowcharts.
 
 ## What it can do
 

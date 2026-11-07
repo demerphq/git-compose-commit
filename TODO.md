@@ -2,23 +2,22 @@
 
 ## Release and agent adoption
 
-- [ ] Review and merge the release preparation and agent-skill changes.
-- [ ] Run the manual release workflow with publication disabled on the intended
+- [x] Review and merge the release preparation and agent-skill changes.
+- [x] Run the manual release workflow with publication disabled on the intended
   release commit; inspect all five real platform builds, archives, checksums,
   installers, and the generated Homebrew formula.
 - [x] Remove the temporary release-preparation push trigger from the release
   workflow before merging; the manual dispatch remains available afterward.
 - [x] Validate both installers, cargo-binstall, and Homebrew against actual
   nonpublished artifacts from the five-platform release matrix.
-- [ ] Recheck the published release assets and package-manager installations
-  after the user explicitly authorizes the first release.
+- [ ] Recheck the published release assets and package-manager installations.
 - [x] Run an online crates.io publication dry run; package verification passed
   and a search found no matching crate.
-- [ ] Confirm crates.io publishing authorization and review the crate package
+- [x] Confirm crates.io publishing authorization and review the crate package
   before publishing; the registry makes the final name availability check.
 - [ ] Review the license attribution and third-party license notices.
 - [ ] Decide whether to sign/notarize macOS and Windows binaries.
-- [ ] When explicitly approved, tag and publish the GitHub Release and crate;
+- [x] When explicitly approved, tag and publish the GitHub Release and crate;
   add the generated formula to the existing Homebrew tap separately.
 - [ ] Review the announcement drafts and community rules before posting.
 

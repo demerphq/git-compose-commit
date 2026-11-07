@@ -1,7 +1,7 @@
 # Release preparation
 
-Nothing in this document has been published yet. The repository includes a
-manual GitHub Actions workflow that builds five native-runner targets: Linux
+The repository includes a manual GitHub Actions workflow that builds five
+native-runner targets: Linux
 x86-64 and ARM64 (musl), macOS Intel and Apple Silicon, and Windows x86-64.
 Graphviz remains an optional external dependency for branching flowcharts.
 Each archive and installer includes both `cli-compose-text` and
@@ -84,7 +84,6 @@ deliberate upgrade. They stage both files, restore earlier files if a replacemen
 fails, and warn about other executables found on `PATH`. A machine failure can
 still interrupt an upgrade. Ensure the chosen directory is on `PATH`.
 
-Once published, `cargo install git-compose-commit` and
-`cargo binstall git-compose-commit` are intended alternatives. The latter
-uses the release archive naming in Cargo metadata. Confirm the actual first
-publication before advertising any of these commands as available.
+`cargo install git-compose-commit --locked` and
+`cargo binstall git-compose-commit` are alternatives. The latter uses the
+release archive naming in Cargo metadata.
