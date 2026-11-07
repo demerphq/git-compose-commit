@@ -1,0 +1,296 @@
+name: Release artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Create a GitHub Release for the existing version tag
+        type: boolean
+        default: false
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: macos-15
+            target: aarch64-apple-darwin
+          - runner: windows-2022
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install musl tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build
+        run: |
+          cargo fetch --locked
+          cargo build --release --locked --target ${{ matrix.target }}
+      - name: Package and smoke test
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -eu
+          VERSION=$(python -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
+          BINARY="target/$TARGET/release/git-compose-commit"
+          TEXT_BINARY="target/$TARGET/release/cli-compose-text"
+          if [ "$RUNNER_OS" = Windows ]; then BINARY="$BINARY.exe"; TEXT_BINARY="$TEXT_BINARY.exe"; fi
+          "$BINARY" --version
+          "$TEXT_BINARY" --version
+          "$BINARY" --agent-usage-list-skills
+          python scripts/package-release.py --version "$VERSION" --target "$TARGET" --binary "$BINARY" --text-binary "$TEXT_BINARY" --out dist
+      - name: Check documented PowerShell skill installation
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $guide = Get-Content docs/agents.md -Raw
+          $match = [regex]::Match($guide, '(?s)```powershell\r?\n(.*?)\r?\n```')
+          if (-not $match.Success) { throw 'PowerShell example missing' }
+          $script = Join-Path $env:RUNNER_TEMP 'install-skills.ps1'
+          [System.IO.File]::WriteAllText($script, $match.Groups[1].Value)
+          $env:PATH = "$env:GITHUB_WORKSPACE\target\x86_64-pc-windows-msvc\release;$env:PATH"
+          Push-Location $env:RUNNER_TEMP
+          try {
+            & $script
+            $files = @(Get-ChildItem .claude/skills -Filter SKILL.md -Recurse)
+            if ($files.Count -ne 11) { throw 'Expected 11 skill files' }
+            [System.IO.File]::WriteAllText($files[0].FullName, 'keep this')
+            $refused = $false
+            try { & $script } catch { $refused = $true }
+            if (-not $refused) { throw 'Skill installer unexpectedly overwrote files' }
+            if ([System.IO.File]::ReadAllText($files[0].FullName) -ne 'keep this') { throw 'Existing skill changed' }
+          } finally { Pop-Location }
+      - name: Smoke test shell installer
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -eu
+          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
+          mkdir -p "$RUNNER_TEMP/release-server/v$VERSION"
+          cp dist/* "$RUNNER_TEMP/release-server/v$VERSION/"
+          export GIT_COMPOSE_COMMIT_RELEASE_BASE="file://$RUNNER_TEMP/release-server"
+          export GIT_COMPOSE_COMMIT_INSTALL_DIR="$RUNNER_TEMP/installed-bin"
+          sh scripts/install.sh "v$VERSION"
+          if sh scripts/install.sh "v$VERSION"; then
+            echo 'Installer unexpectedly overwrote existing binaries' >&2
+            exit 1
+          fi
+          sh scripts/install.sh --force "v$VERSION"
+          cmp "target/$TARGET/release/git-compose-commit" "$GIT_COMPOSE_COMMIT_INSTALL_DIR/git-compose-commit"
+          cmp "target/$TARGET/release/cli-compose-text" "$GIT_COMPOSE_COMMIT_INSTALL_DIR/cli-compose-text"
+          "$GIT_COMPOSE_COMMIT_INSTALL_DIR/git-compose-commit" --version
+      - name: Smoke test PowerShell installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = (cargo metadata --locked --no-deps --format-version 1 | ConvertFrom-Json).packages[0].version
+          $serverDir = Join-Path $env:RUNNER_TEMP 'release-server'
+          New-Item -ItemType Directory -Force (Join-Path $serverDir "v$version") | Out-Null
+          Copy-Item dist/* (Join-Path $serverDir "v$version")
+          $server = Start-Process python -ArgumentList '-m','http.server','18743','--bind','127.0.0.1','--directory',$serverDir -PassThru
+          try {
+            Start-Sleep -Seconds 2
+            $env:GIT_COMPOSE_COMMIT_RELEASE_BASE = 'http://127.0.0.1:18743'
+            $installDir = Join-Path $env:RUNNER_TEMP 'installed-bin'
+            ./scripts/install.ps1 -Version "v$version" -InstallDir $installDir
+            $refused = $false
+            try { ./scripts/install.ps1 -Version "v$version" -InstallDir $installDir }
+            catch { $refused = $true }
+            if (-not $refused) { throw 'Installer unexpectedly overwrote existing binaries' }
+            ./scripts/install.ps1 -Version "v$version" -InstallDir $installDir -Force
+            $oldGit = Join-Path $installDir 'git-compose-commit.exe'
+            [System.IO.File]::WriteAllText($oldGit, 'old executable')
+            $oldHash = (Get-FileHash $oldGit).Hash
+            $lockedPath = Join-Path $installDir 'cli-compose-text.exe'
+            $locked = [System.IO.File]::Open($lockedPath, [System.IO.FileMode]::Open,
+              [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+            $failed = $false
+            try {
+              try { ./scripts/install.ps1 -Version "v$version" -InstallDir $installDir -Force }
+              catch { $failed = $true }
+            } finally { $locked.Dispose() }
+            if (-not $failed) { throw 'Locked executable did not cause a failure' }
+            if ((Get-FileHash $oldGit).Hash -ne $oldHash) { throw 'Rollback did not restore the old executable' }
+            ./scripts/install.ps1 -Version "v$version" -InstallDir $installDir -Force
+            $built = Get-FileHash target/x86_64-pc-windows-msvc/release/git-compose-commit.exe
+            $installed = Get-FileHash (Join-Path $installDir 'git-compose-commit.exe')
+            if ($built.Hash -ne $installed.Hash) { throw 'Installed binary differs from build' }
+            $builtText = Get-FileHash target/x86_64-pc-windows-msvc/release/cli-compose-text.exe
+            $installedText = Get-FileHash (Join-Path $installDir 'cli-compose-text.exe')
+            if ($builtText.Hash -ne $installedText.Hash) { throw 'Installed text binary differs from build' }
+            $archive = Get-ChildItem (Join-Path $serverDir "v$version") -Filter '*.zip' | Select-Object -First 1
+            $stream = [System.IO.File]::Open($archive.FullName, [System.IO.FileMode]::Append)
+            try { $stream.WriteByte(0) } finally { $stream.Dispose() }
+            $rejected = $false
+            try { ./scripts/install.ps1 -Version "v$version" -InstallDir $installDir -Force }
+            catch { $rejected = $true }
+            if (-not $rejected) { throw 'Installer accepted a corrupt archive' }
+            if ((Get-FileHash (Join-Path $installDir 'git-compose-commit.exe')).Hash -ne $built.Hash -or
+                (Get-FileHash (Join-Path $installDir 'cli-compose-text.exe')).Hash -ne $builtText.Hash) {
+              throw 'Checksum failure changed an installed executable'
+            }
+            & (Join-Path $installDir 'git-compose-commit.exe') --version
+            if ($LASTEXITCODE -ne 0) { throw 'Installed binary failed' }
+          } finally {
+            Stop-Process -Id $server.Id -ErrorAction SilentlyContinue
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  validate:
+    timeout-minutes: 15
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: Validate checksums and archive contents
+        run: python3 scripts/validate-release.py dist
+      - name: Prepare Homebrew formula
+        run: python3 scripts/render-homebrew.py dist > dist/git-compose-commit.rb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: validated-release
+          path: dist/*
+          if-no-files-found: error
+
+  binstall-test:
+    timeout-minutes: 15
+    needs: validate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: validated-release
+          path: dist
+      - uses: cargo-bins/cargo-binstall@v1.26.2
+        with:
+          version: v1.26.2
+      - name: Test both binaries for each supported target
+        shell: bash
+        run: |
+          set -eu
+          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
+          mkdir -p "$RUNNER_TEMP/server/releases/download/v$VERSION"
+          cp dist/*.tar.gz dist/*.zip "$RUNNER_TEMP/server/releases/download/v$VERSION/"
+          python3 -m http.server 18745 --bind 127.0.0.1 --directory "$RUNNER_TEMP/server" > "$RUNNER_TEMP/http.log" 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID"' EXIT
+          sleep 2
+          python3 -c 'from pathlib import Path; p=Path("Cargo.toml"); s=p.read_text(); p.write_text(s.replace("https://github.com/demerphq/git-compose-commit", "http://127.0.0.1:18745"))'
+          for target in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-unknown-linux-musl x86_64-apple-darwin aarch64-apple-darwin x86_64-pc-windows-msvc; do
+            extension=''
+            case "$target" in
+              x86_64-unknown-linux-*) archive_target=x86_64-unknown-linux-musl ;;
+              aarch64-unknown-linux-*) archive_target=aarch64-unknown-linux-musl ;;
+              *-windows-*) archive_target="$target"; extension=.exe ;;
+              *) archive_target="$target" ;;
+            esac
+            destination="$RUNNER_TEMP/binstall-$target"
+            cargo binstall git-compose-commit --manifest-path Cargo.toml --targets "$target" --allow-insecure-http --disable-telemetry --no-discover-github-token --strategies crate-meta-data --no-track --no-confirm --install-path "$destination"
+            mkdir -p "$RUNNER_TEMP/expected-$target"
+            if [ -n "$extension" ]; then
+              python3 -m zipfile -e "dist/git-compose-commit-v$VERSION-$archive_target.zip" "$RUNNER_TEMP/expected-$target"
+            else
+              tar -xzf "dist/git-compose-commit-v$VERSION-$archive_target.tar.gz" -C "$RUNNER_TEMP/expected-$target" git-compose-commit cli-compose-text
+            fi
+            cmp "$destination/git-compose-commit$extension" "$RUNNER_TEMP/expected-$target/git-compose-commit$extension"
+            cmp "$destination/cli-compose-text$extension" "$RUNNER_TEMP/expected-$target/cli-compose-text$extension"
+          done
+
+  homebrew-test:
+    timeout-minutes: 15
+    needs: validate
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: validated-release
+          path: dist
+      - name: Install and test the generated formula
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+          HOMEBREW_NO_INSTALL_FROM_API: '1'
+        run: |
+          set -eu
+          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
+          mkdir -p "$RUNNER_TEMP/server/releases/download/v$VERSION"
+          cp dist/*.tar.gz "$RUNNER_TEMP/server/releases/download/v$VERSION/"
+          python3 -m http.server 18746 --bind 127.0.0.1 --directory "$RUNNER_TEMP/server" > "$RUNNER_TEMP/http.log" 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID"' EXIT
+          sleep 2
+          ruby -c dist/git-compose-commit.rb
+          python3 -c 'from pathlib import Path; p=Path("dist/git-compose-commit.rb"); s=p.read_text(); p.write_text(s.replace("https://github.com/demerphq/git-compose-commit", "http://127.0.0.1:18746"))'
+          brew tap-new --no-git local/validation
+          cp dist/git-compose-commit.rb "$(brew --repository local/validation)/Formula/git-compose-commit.rb"
+          brew install local/validation/git-compose-commit
+          brew test local/validation/git-compose-commit
+          git-compose-commit --version
+          cli-compose-text --version
+
+  publish:
+    if: inputs.publish
+    needs: [validate, binstall-test, homebrew-test]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: validated-release
+          path: dist
+      - name: Verify version tag and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
+          test "$(git rev-list -n 1 "v$VERSION")" = "$(git rev-parse HEAD)"
+          gh release create "v$VERSION" --verify-tag --generate-notes dist/* scripts/install.sh scripts/install.ps1

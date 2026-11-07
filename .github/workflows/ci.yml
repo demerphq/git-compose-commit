@@ -30,5 +30,11 @@ jobs:
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: Run tests
         run: cargo test --locked
+      - name: Build executable for distribution checks
+        run: cargo build --locked
+      - name: Check local archives and installer
+        run: python3 -m unittest discover -s tests -p 'test_distribution.py' -v
+      - name: Validate crate package
+        run: cargo package --locked
       - name: Check documentation
         run: RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --locked
