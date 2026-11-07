@@ -6,6 +6,8 @@
 - [ ] Run the manual release workflow with publication disabled on the intended
   release commit; inspect all five real platform builds, archives, checksums,
   installers, and the generated Homebrew formula.
+- [ ] Remove the temporary release-preparation push trigger from the release
+  workflow before merging; the manual dispatch remains available afterward.
 - [ ] Validate the PowerShell installer on Windows, the shell installer on
   macOS and ARM Linux, and cargo-binstall and Homebrew with real release assets.
 - [ ] Verify crates.io name availability and publishing authorization; run an

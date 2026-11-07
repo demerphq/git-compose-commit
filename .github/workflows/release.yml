@@ -1,6 +1,10 @@
 name: Release artifacts
 
 on:
+  # Temporary: exercise the release matrix on the preparation branch before
+  # the workflow exists on the default branch. Remove before merging.
+  push:
+    branches: [release-preparation]
   workflow_dispatch:
     inputs:
       publish:
@@ -103,6 +107,20 @@ jobs:
             try { ./scripts/install.ps1 -Version "v$version" -InstallDir $installDir }
             catch { $refused = $true }
             if (-not $refused) { throw 'Installer unexpectedly overwrote existing binaries' }
+            ./scripts/install.ps1 -Version "v$version" -InstallDir $installDir -Force
+            $oldGit = Join-Path $installDir 'git-compose-commit.exe'
+            [System.IO.File]::WriteAllText($oldGit, 'old executable')
+            $oldHash = (Get-FileHash $oldGit).Hash
+            $lockedPath = Join-Path $installDir 'cli-compose-text.exe'
+            $locked = [System.IO.File]::Open($lockedPath, [System.IO.FileMode]::Open,
+              [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+            $failed = $false
+            try {
+              try { ./scripts/install.ps1 -Version "v$version" -InstallDir $installDir -Force }
+              catch { $failed = $true }
+            } finally { $locked.Dispose() }
+            if (-not $failed) { throw 'Locked executable did not cause a failure' }
+            if ((Get-FileHash $oldGit).Hash -ne $oldHash) { throw 'Rollback did not restore the old executable' }
             ./scripts/install.ps1 -Version "v$version" -InstallDir $installDir -Force
             $built = Get-FileHash target/x86_64-pc-windows-msvc/release/git-compose-commit.exe
             $installed = Get-FileHash (Join-Path $installDir 'git-compose-commit.exe')
