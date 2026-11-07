@@ -431,6 +431,68 @@ level or point backwards, it uses Graphviz's positions; those diagrams may
 look different across Graphviz versions. It builds DOT internally, so the
 options accept the forms shown here rather than arbitrary DOT source.
 
+## Lists
+
+Each `--list-item` adds an item. With no active list, the first item starts a
+numbered list. Use `--numlist` for a numbered list or `--bullets` for a bullet
+list; equivalently, use `--list=numbered` or `--list=bullets`.
+
+Starting a list inside an open list nests it. `--list-end` closes the current
+list and returns to its parent:
+
+```sh
+git-compose-commit \
+  --subject 'Refresh the cache safely' \
+  --numlist \
+  --list-item 'Write the new value' \
+  --bullets \
+  --list-item 'Keep readers on the previous generation' \
+  --list-end \
+  --list-item 'Advance the generation' --stdout
+```
+
+Output:
+
+```text
+Refresh the cache safely
+
+1. Write the new value
+  * Keep readers on the previous generation
+2. Advance the generation
+```
+
+List items wrap with continuation lines indented. You can omit `--list-end` at
+the end of the arguments or before another message section.
+
+## Numbered footers
+
+Put a `[#N]` reference in a `--text` paragraph or `--line`, then define its
+text with `--footer-N`:
+
+```sh
+git-compose-commit \
+  --subject 'Validate cache updates' \
+  --text 'Publish the new generation only after validation [#1].' \
+  --footer-1 'Readers keep using the previous generation until then.' \
+  --stdout
+```
+
+The footer is appended to the message:
+
+```text
+Validate cache updates
+
+Publish the new generation only after validation [#1].
+
+[#1] Readers keep using the previous generation until then.
+```
+
+Footer options may appear before or after references. Footers are listed at
+the bottom in number order, with aligned labels and wrapped text. Missing
+footers, unreferenced footers, and duplicate definitions are errors.
+References inside backtick-delimited code spans are treated as literal text.
+Only `--text` and `--line` are scanned for references.
+
 ## Speech and thought bubbles
 
 Use `--bubble` to draw a phrase with an ASCII speaker avatar. The phrase may
@@ -509,68 +571,6 @@ Use `--rand-seed=N` to control all random choices made by the tool, including
 bubble defaults. The same seed and arguments produce the same output when the
 configuration is also unchanged; without a seed, choices vary between
 runs.
-
-## Lists
-
-Each `--list-item` adds an item. With no active list, the first item starts a
-numbered list. Use `--numlist` for a numbered list or `--bullets` for a bullet
-list; equivalently, use `--list=numbered` or `--list=bullets`.
-
-Starting a list inside an open list nests it. `--list-end` closes the current
-list and returns to its parent:
-
-```sh
-git-compose-commit \
-  --subject 'Refresh the cache safely' \
-  --numlist \
-  --list-item 'Write the new value' \
-  --bullets \
-  --list-item 'Keep readers on the previous generation' \
-  --list-end \
-  --list-item 'Advance the generation' --stdout
-```
-
-Output:
-
-```text
-Refresh the cache safely
-
-1. Write the new value
-  * Keep readers on the previous generation
-2. Advance the generation
-```
-
-List items wrap with continuation lines indented. You can omit `--list-end` at
-the end of the arguments or before another message section.
-
-## Numbered footers
-
-Put a `[#N]` reference in a `--text` paragraph or `--line`, then define its
-text with `--footer-N`:
-
-```sh
-git-compose-commit \
-  --subject 'Validate cache updates' \
-  --text 'Publish the new generation only after validation [#1].' \
-  --footer-1 'Readers keep using the previous generation until then.' \
-  --stdout
-```
-
-The footer is appended to the message:
-
-```text
-Validate cache updates
-
-Publish the new generation only after validation [#1].
-
-[#1] Readers keep using the previous generation until then.
-```
-
-Footer options may appear before or after references. Footers are listed at
-the bottom in number order, with aligned labels and wrapped text. Missing
-footers, unreferenced footers, and duplicate definitions are errors.
-References inside backtick-delimited code spans are treated as literal text.
-Only `--text` and `--line` are scanned for references.
 
 ## How this interacts with Git
 
