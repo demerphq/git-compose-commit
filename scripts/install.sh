@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-usage='Usage: install.sh [--force] VERSION (for example v0.2.0)'
+usage='Usage: install.sh [--force] VERSION (for example v0.2.1)'
 force=false
 version=
 for arg in "$@"; do

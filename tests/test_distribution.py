@@ -4,9 +4,11 @@ from pathlib import Path
 import platform
 import re
 import subprocess
+import tarfile
 import tempfile
 import tomllib
 import unittest
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = tomllib.loads((ROOT / "Cargo.toml").read_text())["package"]["version"]
@@ -54,6 +56,15 @@ class DistributionTests(unittest.TestCase):
                                cwd=ROOT, check=True, capture_output=True)
             subprocess.run(["python3", "scripts/validate-release.py", str(dist)],
                            cwd=ROOT, check=True, capture_output=True)
+            tar_path = dist / f"git-compose-commit-v{VERSION}-x86_64-unknown-linux-musl.tar.gz"
+            zip_path = dist / f"git-compose-commit-v{VERSION}-x86_64-pc-windows-msvc.zip"
+            with tarfile.open(tar_path) as archive:
+                tar_readme = archive.extractfile("README.md").read()
+            with zipfile.ZipFile(zip_path) as archive:
+                zip_readme = archive.read("README.md")
+            for readme in (tar_readme, zip_readme):
+                self.assertIn(b"brew install demerphq/tap/git-compose-commit", readme)
+                self.assertNotIn(b"Before the first release", readme)
             formula = subprocess.run(["python3", "scripts/render-homebrew.py", str(dist)],
                                      cwd=ROOT, check=True, capture_output=True, text=True).stdout
             self.assertEqual(formula.count("sha256 "), 4)

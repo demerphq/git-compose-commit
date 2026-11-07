@@ -1,8 +1,8 @@
 # Release preparation
 
 The repository includes a manual GitHub Actions workflow that builds five
-native-runner targets: Linux
-x86-64 and ARM64 (musl), macOS Intel and Apple Silicon, and Windows x86-64.
+native-runner targets: Linux x86-64 and ARM64 (musl), macOS Intel and Apple
+Silicon, and Windows x86-64.
 Graphviz remains an optional external dependency for branching flowcharts.
 Each archive and installer includes both `cli-compose-text` and
 `git-compose-commit`.
@@ -19,8 +19,8 @@ No tap credentials or automatic publishing are configured.
 
 1. Update the version in `Cargo.toml` and `Cargo.lock`, review the license
    attribution and release notes, and commit the changes.
-2. Run formatting, Clippy, tests and `cargo package --locked`. Confirm crate
-   name availability and ownership on crates.io before attempting publication.
+2. Run formatting, Clippy, tests and `cargo package --locked`. Confirm the
+   publishing account has ownership of the crate on crates.io.
 3. Run **Release artifacts** from GitHub Actions with `publish` unchecked.
    It builds the five targets, smoke-tests each binary, validates archive
    contents and SHA-256 checksums, and uploads a `validated-release` artifact.
@@ -32,15 +32,14 @@ No tap credentials or automatic publishing are configured.
    validated archives; Graphviz is not a mandatory dependency. Publishing the
    real tap is intentionally not automated.
 
-The workflow uses GitHub-hosted ARM Linux and Intel macOS runners; repository
-availability and runner labels must be checked when the workflow is first run.
+The workflow uses GitHub-hosted ARM Linux and Intel macOS runners.
 The shell and PowerShell installers use SHA-256 files from the same release as
 the archives. Checksums detect transfer corruption but do not establish an
 independent signature of the release. The binaries are not code-signed or
 notarized; macOS and Windows may show security prompts. Arrange signing and
 notarization separately if your distribution requires them.
 
-## Publish the first release, when you choose
+## Publish a release
 
 1. Merge the reviewed release commit into the intended release branch. Run the
    dry workflow above on that exact commit and inspect the artifacts.
@@ -51,8 +50,7 @@ notarization separately if your distribution requires them.
    creates the GitHub Release with archives, checksums, installers, and the
    generated formula. It does not create the tag or publish to crates.io.
 4. After checking the GitHub Release, run `cargo publish --locked` with an
-   authorized crates.io account. First verify the name is available and that
-   you are authorized to publish the crate.
+   authorized crates.io account.
 5. Place the generated formula in the existing `demerphq/homebrew-tap`
    repository at `Formula/git-compose-commit.rb`, verify its checksums against
    the release, and push it to the tap. Then test
@@ -66,13 +64,13 @@ For a particular published version, download the corresponding installer from
 the GitHub Release, inspect it, and run it. For example:
 
 ```sh
-curl -fLO https://github.com/demerphq/git-compose-commit/releases/download/v0.2.0/install.sh
-sh install.sh v0.2.0
+curl -fLO https://github.com/demerphq/git-compose-commit/releases/download/v0.2.1/install.sh
+sh install.sh v0.2.1
 ```
 
 ```powershell
-Invoke-WebRequest https://github.com/demerphq/git-compose-commit/releases/download/v0.2.0/install.ps1 -OutFile install.ps1
-./install.ps1 -Version v0.2.0
+Invoke-WebRequest https://github.com/demerphq/git-compose-commit/releases/download/v0.2.1/install.ps1 -OutFile install.ps1
+./install.ps1 -Version v0.2.1
 ```
 
 The shell installer writes to `~/.local/bin` by default; set
