@@ -4,6 +4,9 @@ Usage: git-compose-commit [COMPOSE OPTIONS] [GIT OPTIONS] [-- PATHSPEC...]
 
 HOW IT WORKS
 
+  cli-compose-text uses the same message options and writes to stdout or a file
+  without invoking Git. This command wraps the composer and Git together.
+
   The subject is first. Other sections keep argument order and are separated
   by blank lines. Normally the tool writes a temporary message file and runs
   git commit -F with it. Git handles its normal cleanup and hooks; options
@@ -24,6 +27,7 @@ MESSAGE OPTIONS
   --note TEXT          Add a wrapped Note: paragraph
   --warning TEXT       Add a wrapped Warning: paragraph
   --wrap-width N       Set wrapping and alignment margin (20-256; default 72)
+  --charset NAME       Select ascii (default) or unicode for charts and tables
 
   Repeat --text, --detail, and --line to add more sections. Adjacent --field
   options form one block. A field splits at its first colon; both sides must
@@ -56,9 +60,13 @@ LISTS
   --bullets            Start a bullet list (also --list=bullets)
   --list KIND          Start a numbered or bullets list
   --list-end           Return to the parent list
+  --checklist-item X   Add done:TEXT or todo:TEXT as a checklist item
 
   Starting a list inside a list nests it. --list-end returns to the parent;
   the next message section closes open lists.
+  Repeated --checklist-item options form a checklist, for example:
+    --checklist-item 'done:Schema' --checklist-item 'todo:Backfill'
+  yields [x] Schema and [ ] Backfill on separate lines.
 
 FOOTERS
 
@@ -71,11 +79,26 @@ BAR CHARTS
 
   --hbar-chart DATA    Add a horizontal ASCII bar chart
   --vbar-chart DATA    Add a vertical ASCII bar chart
+  --sparkline DATA     Add a compact sequence of scaled values
+  --progress VALUE     Add a progress bar from a percentage or fraction
 
   Bar charts need at least two label:value items with nonnegative integers.
   Horizontal width defaults to 24; vertical height defaults to 6. Sizes range
   from 1 to 256. Settings use semicolons; with settings, use data=... . float
   accepts left, center, or right. Charts default to center.
+
+  A sparkline accepts comma-separated finite numbers, including negatives.
+  For settings use data=... with semicolon-separated label=, min=, max=,
+  endpoints=true|false and float=left|center|right. For example:
+    --sparkline 'float=left;label=Load;data=-2,0,2'
+  yields the line "Load: .+@". Use --charset=unicode for block characters.
+  Values must fit the supplied limits and the resulting line must fit the
+  message margin. Constant values use a middle level.
+
+  Progress accepts 40% or 2/5. With settings, use value=... and optional
+  width=, label=, and float=. For example:
+    --progress 'float=left;label=Migration;width=5;value=40%'
+  yields "Migration: [##...] 40%". Bars must fit the message margin.
 
 LINEAR FLOW CHARTS
 
@@ -106,15 +129,30 @@ BRANCHING FLOWCHARTS
   spacing; both accept numbers greater than zero through 10. The tool builds
   DOT internally, so arbitrary DOT source is not accepted.
 
+VISUAL DECORATIONS
+
+  --banner OPTIONS     Add an optional decorative heading
+  --badges OPTIONS     Add compact labels on one line
+  --stamp OPTIONS      Add a compact named piece of ASCII art
+
+  Pass a bare heading, or use text= with style=plain|box|double|heavy|retro,
+  width=N, and float=left|center|right, separated by semicolons. Width must
+  fit the heading and message margin. Badges accept comma-separated labels,
+  or labels=... with style=plain|boxed and float=... . Decorations are opt-in.
+  Stamps use a bare name or name= with optional label= and float=. Names are
+  approved, warning, tests, achievement, bug, rip, deprecated, performance.
+
 SPEECH AND THOUGHT BUBBLES
 
   --bubble OPTIONS     Add an ASCII bubble with a speaker
+  --fortune VALUE      Show an original joke in a bubble: random or 1 through 6
 
   Pass plain text for the phrase, for example --bubble 'Hello there!'.
   Unless the value starts with a recognized name= clause, it is all text.
   For explicit settings, use name=value clauses separated by semicolons:
     phrase=TEXT         Required; the words in the bubble
-    speaker=NAME        cat, dog, or stick-figure
+    speaker=NAME        cat, dog, stick-figure, cow, robot, owl, dragon,
+                        penguin, duck (also rubber-duck), or ghost
     style=STYLE         speech (also voice) or thought
     speaker-side=SIDE   below (default), left, or right
     bubble-side=SIDE    left, center, or right relative to the speaker
@@ -124,6 +162,7 @@ SPEECH AND THOUGHT BUBBLES
   set in ~/.compose-commit.toml. --rand-seed makes the choices repeatable.
   Explicit settings always win over configured defaults. Speech bubbles above
   a speaker use one slash aimed at the head; thought bubbles use dots.
+  --fortune=random uses the same seed as bubble choices.
 
 ALIASES, DEFAULTS, AND HELP
 
@@ -134,15 +173,22 @@ ALIASES, DEFAULTS, AND HELP
 
   ~/.compose-commit.toml may set wrap_width, rand_seed, bubble_speaker,
   bubble_style, bubble_speaker_side, bubble_side, and bubble_float. CLI values
-  override them. See the README for a configuration example.
+  override them. For example:
+    wrap_width = 68
+    bubble_speaker = "cat"
 
   -h, --help=short     Show the quick synopsis
   --help, --help=long  Show this guide
   --man                Show this same guide
   --help=TOPIC          Show one topic with its examples:
                         message, output, tables, lists, footers, charts,
-                        flowcharts, bubbles, or examples
+                        flowcharts, visuals, bubbles, or examples
   --version            Show the installed package version
+  --agent-usage-list-skills       List embedded agent skill names
+  --agent-usage-show-skill=NAME   Print a skill; ALL exports every file
+
+  Agent usage options are standalone and do not invoke Git. See the README
+  and docs/agents.md for installation and the ALL export format.
 
 EXAMPLES
 
@@ -339,3 +385,17 @@ EXAMPLES
         * Validate
 
         [#1] Readers see only valid data.
+
+  15. Heading and badges:
+      cli-compose-text --subject 'Ready' \
+        --banner 'text=RELEASE;style=box;width=11;float=left' \
+        --badges 'labels=TESTED,READY;float=left'
+
+      Output:
+        Ready
+
+        +---------+
+        | RELEASE |
+        +---------+
+
+        [ TESTED ] [ READY ]

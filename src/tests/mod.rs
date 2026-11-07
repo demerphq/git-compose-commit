@@ -567,9 +567,143 @@ fn bubble_requires_speaker_and_phrase() {
     );
     assert_eq!(
         compose(args(&["--bubble=speaker=fox;phrase=Hello"])).unwrap_err(),
-        "--bubble speaker must be 'cat', 'dog', or 'stick-figure'"
+        "--bubble speaker must be cat, dog, stick-figure, cow, robot, owl, dragon, penguin, duck, or ghost"
     );
     assert!(message(&["--bubble=phrase=Hello"]).contains("Hello"));
+}
+
+#[test]
+fn additional_bubble_speakers_render_and_fit() {
+    for speaker in ["cow", "robot", "owl", "dragon", "penguin", "duck", "ghost"] {
+        for side in ["below", "left", "right"] {
+            for style in ["speech", "thought"] {
+                for position in ["left", "center", "right"] {
+                    let option = format!(
+                        "--bubble=speaker={speaker};style={style};phrase=Hi;speaker-side={side};bubble-side={position};float=left"
+                    );
+                    let rendered = message(&["--wrap-width=20", &option]);
+                    assert!(rendered.contains("Hi"), "{speaker} {side}: {rendered}");
+                    assert!(
+                        rendered.lines().all(|line| display_width(line) <= 20),
+                        "{speaker} {side} {style} {position}: {rendered}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn unicode_palettes_and_sparklines_are_opt_in() {
+    let table = message(&[
+        "--charset=unicode",
+        "--table-head=Item,Value",
+        "--table-row=猫,2",
+    ]);
+    assert!(table.starts_with("┌"));
+    assert!(table.contains("│ 猫"));
+    let ascii = message(&["--sparkline=float=left;label=Load;data=-2,0,2"]);
+    assert_eq!(ascii, "Load: .+@\n");
+    let unicode = message(&["--charset=unicode", "--sparkline=float=left;data=-2,0,2"]);
+    assert_eq!(unicode, "▁▅█\n");
+    assert_eq!(
+        message(&["--sparkline=float=left;label=Load;min=-10;max=10;endpoints=true;data=-10,0,10"]),
+        "Load: .+@ (-10 -> 10)\n"
+    );
+    assert_eq!(message(&["--sparkline=float=left;data=3,3,3"]), "+++\n");
+    for option in [
+        "--sparkline=NaN,1",
+        "--sparkline=min=0;data=-1,2",
+        "--charset=auto",
+    ] {
+        assert!(compose(args(&[option])).is_err(), "{option}");
+    }
+    assert!(compose(args(&[
+        "--wrap-width=20",
+        "--sparkline=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21"
+    ]))
+    .is_err());
+}
+
+#[test]
+fn progress_and_checklists_render_and_validate() {
+    assert_eq!(
+        message(&["--progress=float=left;label=Migration;width=5;value=40%"]),
+        "Migration: [##...] 40%\n"
+    );
+    assert_eq!(
+        message(&[
+            "--charset=unicode",
+            "--progress=float=left;width=5;value=2/5"
+        ]),
+        "[██░░░] 40%\n"
+    );
+    assert_eq!(
+        message(&[
+            "--checklist-item=done:Schema",
+            "--checklist-item=todo:Backfill"
+        ]),
+        "[x] Schema\n[ ] Backfill\n"
+    );
+    for value in ["101%", "1/0", "-1%", "NaN%"] {
+        assert!(compose(args(&[&format!("--progress={value}")])).is_err());
+    }
+}
+
+#[test]
+fn banners_and_badges_respect_width_and_charset() {
+    assert_eq!(
+        message(&["--banner=text=Hi;style=box;width=8;float=left"]),
+        "+------+\n|  Hi  |\n+------+\n"
+    );
+    assert_eq!(
+        message(&[
+            "--charset=unicode",
+            "--banner=text=Hi;style=box;width=8;float=left"
+        ]),
+        "┌──────┐\n│  Hi  │\n└──────┘\n"
+    );
+    assert_eq!(
+        message(&["--badges=labels=PERF,TESTED;float=left"]),
+        "[ PERF ] [ TESTED ]\n"
+    );
+    assert_eq!(
+        message(&["--badges=labels=A,B;style=boxed;float=left"]),
+        "+---+ +---+\n| A | | B |\n+---+ +---+\n"
+    );
+    assert!(compose(args(&["--banner=text=too wide;style=box;width=4"])).is_err());
+    assert!(compose(args(&["--badges=labels=A,,B"])).is_err());
+}
+
+#[test]
+fn fortunes_are_opt_in_and_seeded() {
+    let first = message(&["--rand-seed=42", "--fortune=random"]);
+    assert_eq!(first, message(&["--rand-seed=42", "--fortune=random"]));
+    let explicit = message(&["--rand-seed=42", "--fortune=2"]);
+    assert!(explicit.contains("One more cache"));
+    assert!(compose(args(&["--fortune=0"])).is_err());
+    assert!(compose(args(&["--fortune=7"])).is_err());
+}
+
+#[test]
+fn stamps_have_named_art_and_optional_labels() {
+    for name in [
+        "approved",
+        "warning",
+        "tests",
+        "achievement",
+        "bug",
+        "rip",
+        "deprecated",
+        "performance",
+    ] {
+        let option = format!("--stamp=name={name};label=Done;float=left");
+        let output = message(&[&option]);
+        assert!(output.contains("Done"), "{name}: {output}");
+        assert!(output.lines().count() >= 2);
+    }
+    assert!(message(&["--stamp=name=rip;float=left"]).contains("|RIP|"));
+    assert!(compose(args(&["--stamp=unknown"])).is_err());
 }
 
 #[test]
@@ -678,6 +812,28 @@ fn branching_flowchart_aligns_unicode_labels() {
         }
         assert!(chart.contains("猫"));
     }
+    let zero_width = message(&[
+        "--flow-chart=direction=horizontal;float=left",
+        "--flow-node=start:\u{301}",
+        "--flow-node=done:Done",
+        "--flow-edge=start -> done",
+    ]);
+    let widths: Vec<_> = zero_width.lines().map(display_width).collect();
+    assert!(
+        widths.iter().all(|width| *width == widths[0]),
+        "{zero_width}"
+    );
+    let unicode = message(&[
+        "--charset=unicode",
+        "--flow-chart=direction=horizontal;float=left",
+        "--flow-node=start:A+B",
+        "--flow-node=done:猫",
+        "--flow-edge=start -> done",
+    ]);
+    assert!(unicode.contains("│ A+B │"), "{unicode}");
+    assert!(unicode.contains("▶│ 猫 │"), "{unicode}");
+    let widths: Vec<_> = unicode.lines().map(display_width).collect();
+    assert!(widths.iter().all(|width| *width == widths[0]), "{unicode}");
 }
 
 #[test]

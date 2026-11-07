@@ -10,9 +10,12 @@ Preview without committing:
     --stdout
 
 Message:   --subject, --text, --detail, --line, --field, --note, --warning
-Structure: --table-head/--table-row, --list-item, --bullets, --footer-N
-Visuals:   --bubble, --hbar-chart, --vbar-chart, --flow-chart
-Control:   --stdout, --output, --wrap-width, --rand-seed, --version
+Structure: --table-head/--table-row, --list-item, --checklist-item, --footer-N
+Visuals:   --sparkline, --progress, --banner, --badges, --bubble, --fortune
+Charts:    --hbar-chart, --vbar-chart, --hflow-chart, --flow-chart
+Control:   --stdout, --output, --wrap-width, --charset, --rand-seed, --version
 
 Use --help or --man for the full guide. Focus with --help=TOPIC:
-  message, output, tables, lists, footers, charts, flowcharts, bubbles, examples
+  message, output, tables, lists, footers, charts, flowcharts, visuals,
+  bubbles, examples
+Agent skills: --agent-usage-list-skills and --agent-usage-show-skill=NAME
