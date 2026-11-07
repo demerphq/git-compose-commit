@@ -37,17 +37,17 @@ OUTPUT AND CONTROL
 
   --stdout is the portable equivalent of --output /dev/stdout. --output
   overwrites an existing file. The two output modes cannot be combined.
-  The same seed and arguments give the same random choices.
+  With the same configuration and arguments, a seed repeats random choices.
 
 TABLES
 
-  --th CELLS           Start a table with comma-separated headings
-  --tr CELLS           Add a comma-separated row to that table
+  --table-head CELLS   Start a table with comma-separated headings
+  --table-row CELLS    Add a comma-separated row to that table
   --table-rows ROWS    Add several semicolon-separated rows
 
   Rows must match the number of headings. Cells are trimmed and sized to fit.
-  CSV quoting and escaping are not supported. --table-head and --table-row
-  alias --th and --tr.
+  CSV quoting and escaping are not supported. --th and --tr are shorter
+  aliases for --table-head and --table-row.
 
 LISTS
 
@@ -110,7 +110,9 @@ SPEECH AND THOUGHT BUBBLES
 
   --bubble OPTIONS     Add an ASCII bubble with a speaker
 
-  Clauses use name=value and are separated by semicolons:
+  Pass plain text for the phrase, for example --bubble 'Hello there!'.
+  Unless the value starts with a recognized name= clause, it is all text.
+  For explicit settings, use name=value clauses separated by semicolons:
     phrase=TEXT         Required; the words in the bubble
     speaker=NAME        cat, dog, or stick-figure
     style=STYLE         speech (also voice) or thought
@@ -176,8 +178,8 @@ EXAMPLES
        Note: Keep the old config readable.
 
   4. Table:
-     git-compose-commit --subject 'Table' --th 'Name,State' \
-       --tr 'cache,ready' --tr 'worker,waiting' --stdout
+     git-compose-commit --subject 'Table' --table-head 'Name,State' \
+       --table-row 'cache,ready' --table-row 'worker,waiting' --stdout
 
      Output:
        Table
@@ -286,9 +288,10 @@ EXAMPLES
        (-------)                (------)
 
   12. Speech bubble with a chosen speaker and placement:
-      git-compose-commit --subject 'Bubble' --rand-seed=1 \
-        --bubble 'speaker=cat;style=speech;phrase=Hi;bubble-side=center' \
-        --stdout
+      bubble='speaker=cat;style=speech;phrase=Hi;speaker-side=below'
+      bubble="$bubble;bubble-side=center;float=left"
+      git-compose-commit --subject 'Bubble' --wrap-width=72 \
+        --bubble "$bubble" --stdout
 
       Output:
         Bubble
@@ -302,10 +305,10 @@ EXAMPLES
          > ^ <
 
   13. Thought bubble with a stick figure:
-      git-compose-commit --subject 'Consider the change' --rand-seed=1 \
-        --bubble \
-        'speaker=stick-figure;style=thought;phrase=Maybe;bubble-side=center' \
-        --stdout
+      bubble='speaker=stick-figure;style=thought;phrase=Maybe'
+      bubble="$bubble;speaker-side=below;bubble-side=center;float=left"
+      git-compose-commit --subject 'Consider the change' --wrap-width=72 \
+        --bubble "$bubble" --stdout
 
       Output:
         Consider the change

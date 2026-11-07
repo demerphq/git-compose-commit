@@ -6,6 +6,7 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
 use std::sync::atomic::{AtomicU64, Ordering};
+use unicode_width::UnicodeWidthStr;
 
 const WRAP_WIDTH: usize = 72;
 const MAX_CHART_SIZE: usize = 256;
@@ -1070,13 +1071,33 @@ fn wrap_paragraph(text: &str) -> String {
     wrap_paragraph_at(text, WRAP_WIDTH)
 }
 
+fn display_width(text: &str) -> usize {
+    UnicodeWidthStr::width(text)
+}
+
+fn pad_left_aligned(text: &str, width: usize) -> String {
+    format!(
+        "{text}{}",
+        " ".repeat(width.saturating_sub(display_width(text)))
+    )
+}
+
+fn pad_centered(text: &str, width: usize) -> String {
+    let padding = width.saturating_sub(display_width(text));
+    format!(
+        "{}{text}{}",
+        " ".repeat(padding / 2),
+        " ".repeat(padding - padding / 2)
+    )
+}
+
 fn wrap_paragraph_at(text: &str, width: usize) -> String {
     let words: Vec<&str> = text.split_whitespace().collect();
     let mut lines = Vec::new();
     let mut line = String::new();
     for word in words {
-        let extra = word.chars().count() + usize::from(!line.is_empty());
-        if !line.is_empty() && line.chars().count() + extra > width {
+        let extra = display_width(word) + usize::from(!line.is_empty());
+        if !line.is_empty() && display_width(&line) + extra > width {
             lines.push(std::mem::take(&mut line));
         }
         if !line.is_empty() {
@@ -1098,10 +1119,10 @@ fn parse_table_cells(value: &str) -> Vec<String> {
 }
 
 fn format_table(head: &[String], rows: &[Vec<String>]) -> String {
-    let mut widths: Vec<usize> = head.iter().map(|cell| cell.chars().count()).collect();
+    let mut widths: Vec<usize> = head.iter().map(|cell| display_width(cell)).collect();
     for row in rows {
         for (width, cell) in widths.iter_mut().zip(row) {
-            *width = (*width).max(cell.chars().count());
+            *width = (*width).max(display_width(cell));
         }
     }
     let border = format!(
@@ -1117,7 +1138,7 @@ fn format_table(head: &[String], rows: &[Vec<String>]) -> String {
             "| {} |",
             row.iter()
                 .zip(&widths)
-                .map(|(cell, width)| format!("{cell:<width$}", width = *width))
+                .map(|(cell, width)| pad_left_aligned(cell, *width))
                 .collect::<Vec<_>>()
                 .join(" | ")
         )
@@ -2015,10 +2036,15 @@ fn parse_bubble(
     let mut speaker_side = None;
     let mut bubble_side = None;
     let mut alignment = None;
-    let mut phrase = None;
+    let first_key = value.split_once('=').map(|(key, _)| key);
+    let structured = matches!(
+        first_key,
+        Some("speaker" | "style" | "speaker-side" | "bubble-side" | "float" | "phrase")
+    );
+    let mut phrase = if structured { None } else { Some(value) };
     let mut seen = BTreeSet::new();
 
-    for clause in value.split(';') {
+    for clause in value.split(';').filter(|_| structured) {
         let Some((key, setting)) = clause.split_once('=') else {
             return Err("--bubble clauses must use name=value".into());
         };
@@ -2152,14 +2178,14 @@ fn format_flow_chart(chart: &FlowChart, wrap_width: usize) -> String {
     let box_width = chart
         .steps
         .iter()
-        .map(|step| step.chars().count())
+        .map(|step| display_width(step))
         .max()
         .unwrap_or(0);
     let border = format!("+{}+", "-".repeat(box_width + 2));
     let render_box = |step: &str| {
         (
             border.clone(),
-            format!("| {step:^box_width$} |"),
+            format!("| {} |", pad_centered(step, box_width)),
             border.clone(),
         )
     };
@@ -2209,7 +2235,7 @@ fn format_bubble(bubble: &Bubble, wrap_width: usize) -> String {
     let avatar = bubble_avatar(bubble.speaker);
     let avatar_width = avatar
         .iter()
-        .map(|line| line.chars().count())
+        .map(|line| display_width(line))
         .max()
         .unwrap_or(0);
     let head_anchor = match bubble.speaker {
@@ -2231,7 +2257,7 @@ fn format_bubble(bubble: &Bubble, wrap_width: usize) -> String {
     let phrase_lines = phrase_lines.lines().collect::<Vec<_>>();
     let phrase_width = phrase_lines
         .iter()
-        .map(|line| line.chars().count())
+        .map(|line| display_width(line))
         .max()
         .unwrap_or(1)
         .max(1);
@@ -2242,14 +2268,14 @@ fn format_bubble(bubble: &Bubble, wrap_width: usize) -> String {
             lines.extend(
                 phrase_lines
                     .iter()
-                    .map(|line| format!("( {line:<phrase_width$} )")),
+                    .map(|line| format!("( {} )", pad_left_aligned(line, phrase_width))),
             );
             lines.push(format!(" '{border}'"));
             lines
         }
         BubbleStyle::Thought => phrase_lines
             .iter()
-            .map(|line| format!("( {line:<phrase_width$} )"))
+            .map(|line| format!("( {} )", pad_left_aligned(line, phrase_width)))
             .collect(),
     };
     let bubble_width = phrase_width + 4;
@@ -2329,7 +2355,8 @@ fn format_bubble(bubble: &Bubble, wrap_width: usize) -> String {
                             avatar_width = avatar_width
                         ),
                         SpeakerSide::Right => format!(
-                            "{bubble_line:<bubble_width$}{spacer}{avatar_line:<avatar_width$}"
+                            "{}{spacer}{avatar_line:<avatar_width$}",
+                            pad_left_aligned(bubble_line, bubble_width)
                         ),
                         SpeakerSide::Below => unreachable!(),
                     }
@@ -2362,11 +2389,7 @@ fn bubble_avatar(speaker: BubbleSpeaker) -> &'static [&'static str] {
 }
 
 fn align_block(block: &str, alignment: ChartAlignment, wrap_width: usize) -> String {
-    let width = block
-        .lines()
-        .map(|line| line.chars().count())
-        .max()
-        .unwrap_or(0);
+    let width = block.lines().map(display_width).max().unwrap_or(0);
     let padding = match alignment {
         ChartAlignment::Left => 0,
         ChartAlignment::Center => wrap_width.saturating_sub(width) / 2,
@@ -2384,7 +2407,7 @@ fn format_horizontal_chart(chart: &BarChart) -> String {
     let label_width = chart
         .entries
         .iter()
-        .map(|(label, _)| label.chars().count())
+        .map(|(label, _)| display_width(label))
         .max()
         .unwrap_or(0);
     let max_value = chart
@@ -2403,9 +2426,9 @@ fn format_horizontal_chart(chart: &BarChart) -> String {
                 (((*value as u128 * chart.size as u128) / max_value as u128) as usize).max(1)
             };
             format!(
-                "{label:<label_width$} | {} {value}",
-                "#".repeat(bar_length),
-                label_width = label_width
+                "{} | {} {value}",
+                pad_left_aligned(label, label_width),
+                "#".repeat(bar_length)
             )
         })
         .collect::<Vec<_>>()
@@ -2423,7 +2446,7 @@ fn format_vertical_chart(chart: &BarChart) -> String {
     let cell_width = chart
         .entries
         .iter()
-        .map(|(label, _)| label.chars().count())
+        .map(|(label, _)| display_width(label))
         .max()
         .unwrap_or(1)
         .max(1);
@@ -2468,7 +2491,7 @@ fn format_vertical_chart(chart: &BarChart) -> String {
     let labels = chart
         .entries
         .iter()
-        .map(|(label, _)| format!("{label:^cell_width$}"))
+        .map(|(label, _)| pad_centered(label, cell_width))
         .collect::<Vec<_>>()
         .join(" ");
     lines.push(format!("{}   {labels}", " ".repeat(axis_width)));
@@ -2552,12 +2575,12 @@ fn find_footer_references(text: &str) -> BTreeSet<usize> {
 fn format_fields(fields: &[(String, String)], wrap_width: usize) -> String {
     let key_width = fields
         .iter()
-        .map(|(key, _)| key.chars().count())
+        .map(|(key, _)| display_width(key))
         .max()
         .unwrap_or(0);
     let mut lines = Vec::new();
     for (key, value) in fields {
-        let prefix = format!("{key:<key_width$}: ");
+        let prefix = format!("{}: ", pad_left_aligned(key, key_width));
         let continuation = " ".repeat(key_width + 2);
         let wrapped = wrap_paragraph_at(value, wrap_width.saturating_sub(key_width + 2));
         let mut wrapped_lines = wrapped.lines();

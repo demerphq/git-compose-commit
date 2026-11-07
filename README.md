@@ -43,6 +43,12 @@ To focus on one subject, use `--help=TOPIC`. Available topics are `message`,
 example, while `--help=examples` gathers commands with their output. Use `-h`
 to see the quick synopsis and topic list.
 
+For an assistant or a script composing a message, a useful workflow is to
+read the relevant topic, choose the sections you need, and preview with
+`--stdout`. Check the result, then run the command without `--stdout` to
+create the commit. Set bubble options explicitly when you need repeatable
+output. Examples below assume the default configuration unless shown otherwise.
+
 ## Preview and commit
 
 By default, `git-compose-commit` builds the message and runs `git commit`.
@@ -147,6 +153,7 @@ fields, callouts, and footers. Literal `--detail` and `--line` content stays
 unwrapped. Git may apply its normal commit-message cleanup after the wrapper
 supplies the message.
 
+
 ## Fields and callouts
 
 Use repeated `--field=KEY:VALUE` options for a compact aligned block. The
@@ -211,15 +218,16 @@ selected message margin.
 
 ## Tables
 
-Use `--th` to define comma-separated column headings. Add rows with `--tr`, or
+Use `--table-head` to define comma-separated column headings. Add rows with
+`--table-row`, or
 pass several semicolon-separated rows to `--table-rows`:
 
 ```sh
 git-compose-commit \
   --subject 'Record cache status' \
-  --th 'Name,State' \
-  --tr 'cache,ready' \
-  --tr 'worker,waiting' --stdout
+  --table-head 'Name,State' \
+  --table-row 'cache,ready' \
+  --table-row 'worker,waiting' --stdout
 ```
 
 The table section looks like this:
@@ -245,9 +253,7 @@ Each row must have the same number of cells as the header. Cells are trimmed
 and columns are sized to fit. These are simple delimiters, not full CSV:
 quoting and escaping within a cell are not supported.
 
-`--table-head` and `--table-row` are also accepted. The namespaced short forms
-`--compose-th` and `--compose-tr`, and full forms `--compose-table-head` and
-`--compose-table-row`, work as well.
+`--th` and `--tr` are shorter aliases for `--table-head` and `--table-row`.
 
 ## ASCII bar charts
 
@@ -430,6 +436,17 @@ options accept the forms shown here rather than arbitrary DOT source.
 Use `--bubble` to draw a phrase with an ASCII speaker avatar. The phrase may
 contain spaces; separate clauses with semicolons.
 
+For a surprise, pass the phrase on its own:
+
+```sh
+git-compose-commit --subject 'A quick note' --bubble 'Hello there!' --stdout
+```
+
+The speaker and other choices follow your configured defaults, or are chosen
+randomly when not configured. The speaker is below the bubble by default.
+The entire value is treated as text unless it starts with a recognized clause
+such as `phrase=` or `speaker=`. For explicit settings, use clauses:
+
 For a speech bubble above the cat:
 
 ```sh
@@ -489,8 +506,8 @@ Phrases wrap to fit the message margin. Above the speaker, speech bubbles use
 one `\` or `/` pointer aimed at the speaker's head; thought bubbles use dots.
 
 Use `--rand-seed=N` to control all random choices made by the tool, including
-bubble defaults. The namespaced alias is `--compose-rand-seed=N`. The same seed
-and arguments produce the same output; without a seed, choices vary between
+bubble defaults. The same seed and arguments produce the same output when the
+configuration is also unchanged; without a seed, choices vary between
 runs.
 
 ## Lists
@@ -580,42 +597,11 @@ git-compose-commit --subject 'Update the parser' -- src/parser.rs
 
 ## Option aliases
 
-The short, unprefixed options are convenient to type, but could conflict with
-options added by a future Git release. Use the namespaced forms in scripts or
-when you want to avoid that risk.
-
-| Concise option | Namespaced equivalent |
-| --- | --- |
-| `--subject` | `--compose-subject` |
-| `--text` | `--compose-text` |
-| `--detail` | `--compose-detail` |
-| `--line` | `--compose-line` |
-| `--field` | `--compose-field` |
-| `--note` | `--compose-note` |
-| `--warning` | `--compose-warning` |
-| `--wrap-width` | `--compose-wrap-width` |
-| `--th`, `--table-head` | `--compose-th`, `--compose-table-head` |
-| `--tr`, `--table-row` | `--compose-tr`, `--compose-table-row` |
-| `--table-rows` | `--compose-table-rows` |
-| `--hbar-chart` | `--compose-hbar-chart` |
-| `--vbar-chart` | `--compose-vbar-chart` |
-| `--hflow-chart` | `--compose-hflow-chart` |
-| `--vflow-chart` | `--compose-vflow-chart` |
-| `--flow-chart` | `--compose-flow-chart` |
-| `--flow-node` | `--compose-flow-node` |
-| `--flow-decision` | `--compose-flow-decision` |
-| `--flow-terminal` | `--compose-flow-terminal` |
-| `--flow-edge` | `--compose-flow-edge` |
-| `--output` | `--compose-output` |
-| `--stdout` | `--compose-stdout` |
-| `--bubble` | `--compose-bubble` |
-| `--rand-seed` | `--compose-rand-seed` |
-| `--numlist` | `--compose-numlist` |
-| `--bullets` | `--compose-bullets` |
-| `--list` | `--compose-list` |
-| `--list-item` | `--compose-list-item` |
-| `--list-end` | `--compose-list-end` |
-| `--footer-N` | `--compose-footer-N` |
+The examples use the unprefixed option names. For scripts that must avoid
+collisions with future Git options, add `compose-` after the leading dashes:
+for example, `--subject` becomes `--compose-subject` and `--table-row` becomes
+`--compose-table-row`. Both forms are accepted. `--th` and `--tr` are also
+available as shorter table aliases.
 
 ## Tests
 

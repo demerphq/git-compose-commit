@@ -10,7 +10,7 @@ Preview without committing:
     --stdout
 
 Message:   --subject, --text, --detail, --line, --field, --note, --warning
-Structure: --th/--tr, --list-item, --numlist, --bullets, --footer-N
+Structure: --table-head/--table-row, --list-item, --bullets, --footer-N
 Visuals:   --bubble, --hbar-chart, --vbar-chart, --flow-chart
 Control:   --stdout, --output, --wrap-width, --rand-seed, --version
 

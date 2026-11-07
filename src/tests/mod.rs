@@ -573,6 +573,64 @@ fn bubble_requires_speaker_and_phrase() {
 }
 
 #[test]
+fn bubble_accepts_plain_text_with_random_defaults() {
+    for phrase in ["Hello there", "x=1; this is text", "speaker: hello"] {
+        let options = format!("--bubble={phrase}");
+        let output = message(&["--rand-seed=42", &options]);
+        assert!(output.contains(phrase), "{output}");
+    }
+    assert_eq!(
+        message(&["--rand-seed=42", "--bubble=Hello there"]),
+        message(&["--rand-seed=42", "--bubble=phrase=Hello there"]),
+    );
+    assert_eq!(
+        compose(args(&["--bubble=   "])).unwrap_err(),
+        "--bubble phrase cannot be empty"
+    );
+    assert_eq!(
+        compose(args(&["--bubble=speaker=cat;unknown=value;phrase=Hi"])).unwrap_err(),
+        "--bubble has unknown option 'unknown'"
+    );
+}
+
+#[test]
+fn unicode_display_columns_align_messages_and_diagrams() {
+    assert_eq!(wrap_paragraph_at("猫 猫 猫", 6), "猫 猫\n猫");
+    assert_eq!(
+        wrap_paragraph_at("e\u{301} e\u{301}", 3),
+        "e\u{301} e\u{301}"
+    );
+
+    let table = message(&[
+        "--table-head=Name,Value",
+        "--table-row=猫,yes",
+        "--table-row=e\u{301},no",
+    ]);
+    for line in table.lines() {
+        assert_eq!(display_width(line), 16, "{line}");
+    }
+
+    let chart = message(&["--hflow-chart=float=left;data=猫,e\u{301}"]);
+    let widths: Vec<_> = chart.lines().map(display_width).collect();
+    assert!(widths.iter().all(|width| *width == widths[0]), "{chart}");
+
+    let bubble =
+        message(&["--bubble=speaker=cat;style=speech;phrase=猫;speaker-side=right;float=left"]);
+    let face = bubble
+        .lines()
+        .find(|line| line.contains("( o.o )"))
+        .unwrap();
+    let head = bubble
+        .lines()
+        .find(|line| line.contains("/\\_/\\"))
+        .unwrap();
+    assert_eq!(
+        display_width(&face[..face.find("( o.o )").unwrap()]),
+        display_width(&head[..head.find("/\\_/\\").unwrap()]) - 1
+    );
+}
+
+#[test]
 fn random_seed_reproduces_choices_and_is_not_forwarded_to_git() {
     let first = compose(args(&[
         "--rand-seed",
