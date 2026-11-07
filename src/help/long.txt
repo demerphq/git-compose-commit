@@ -5,10 +5,14 @@ Usage: git-compose-commit [COMPOSE OPTIONS] [GIT OPTIONS] [-- PATHSPEC...]
 HOW IT WORKS
 
   The subject is first. Other sections keep argument order and are separated
-  by blank lines. Git options such as --all and --signoff pass to git commit.
-  Use -- PATHSPEC... to pass paths to Git. Do not pass Git's -m or -F options
-  because this tool supplies the message file. --stdout and --output preview
-  the message without committing and cannot be mixed with Git commit options.
+  by blank lines. Normally the tool writes a temporary message file and runs
+  git commit -F with it. Git handles its normal cleanup and hooks; options
+  such as --all and --signoff pass through. Use -- PATHSPEC... for paths.
+  Do not pass Git's -m or -F options; the tool supplies the message file.
+
+  --stdout and --output FILE both skip git commit entirely. Preview first,
+  then rerun without the output option to commit. Output modes cannot be
+  combined with Git commit options.
 
 MESSAGE OPTIONS
 
@@ -31,9 +35,9 @@ OUTPUT AND CONTROL
   --output FILE        Write the message to FILE; skip git commit
   --rand-seed N        Repeat random bubble choices with the same seed
 
-  --stdout is the portable equivalent of --output /dev/stdout. The two output
-  modes cannot be combined. The same seed and arguments give the same random
-  choices.
+  --stdout is the portable equivalent of --output /dev/stdout. --output
+  overwrites an existing file. The two output modes cannot be combined.
+  The same seed and arguments give the same random choices.
 
 TABLES
 
@@ -85,19 +89,22 @@ LINEAR FLOW CHARTS
 
 BRANCHING FLOWCHARTS
 
-  --flow-chart OPTIONS   Start a directed graph (requires Graphviz's dot)
-  --flow-node ID:TEXT    Add a box
-  --flow-decision ID:TEXT Add a decision diamond
-  --flow-terminal ID:TEXT Add a rounded start/end node
-  --flow-edge EDGE       Add a link, such as 'start -> done'
+  --flow-chart OPTIONS    Start a directed graph (requires Graphviz's dot)
+  --flow-node ID:TEXT     Add a box
+  --flow-decision ID:TEXT Add a decision shape
+  --flow-terminal ID:TEXT Add a rounded start/end shape
+  --flow-edge EDGE        Connect shapes, as in 'start -> done'
 
-  Use direction=vertical|horizontal and float=left|center|right. Optional
-  nodesep=N and ranksep=N control spacing (greater than zero, at most 10).
-  A graph needs at least two nodes and one edge. A different message option
-  closes the graph. Node IDs use letters, digits, or underscores and start
-  with a letter or underscore. Edges accept chains like A -> B -> C and
-  labels such as [label="yes"]. DOT is generated internally; arbitrary DOT
-  source is not accepted.
+  First name the shapes, then connect their IDs with --flow-edge. You can
+  label a link with [label="yes"] or join a chain with A -> B -> C. IDs start
+  with a letter or underscore and may contain letters, digits, and underscores.
+  A graph needs at least two shapes and one link. The next message option
+  closes it; graphs cannot be nested.
+
+  Set direction=vertical|horizontal (default vertical) and
+  float=left|center|right (default center). nodesep=N and ranksep=N adjust
+  spacing; both accept numbers greater than zero through 10. The tool builds
+  DOT internally, so arbitrary DOT source is not accepted.
 
 SPEECH AND THOUGHT BUBBLES
 
@@ -217,7 +224,23 @@ EXAMPLES
        tests | ########## 10
        docs  | ##### 5
 
-  8. Linear flow chart:
+  8. Vertical bar chart:
+      git-compose-commit --subject 'Test coverage' \
+        --vbar-chart 'float=left;height=5;data=tests:10,docs:5' \
+        --stdout
+
+      Output:
+        Test coverage
+
+        10 |   #
+           |   #
+           |   #     #
+           |   #     #
+           |   #     #
+         0 +------------
+            tests docs
+
+  9. Linear flow chart:
      git-compose-commit --subject 'Flow' \
        --hflow-chart 'float=left;data=Parse,Validate' --stdout
 
@@ -228,7 +251,28 @@ EXAMPLES
        |  Parse   | --> | Validate |
        +----------+     +----------+
 
-  9. Branching flowchart. Install Graphviz so dot is on PATH:
+  10. Vertical flow chart:
+      git-compose-commit --subject 'Release flow' \
+        --vflow-chart 'float=left;data=Input,Transform,Output' --stdout
+
+      Output:
+        Release flow
+
+        +-----------+
+        |   Input   |
+        +-----------+
+              |
+              v
+        +-----------+
+        | Transform |
+        +-----------+
+              |
+              v
+        +-----------+
+        |  Output   |
+        +-----------+
+
+  11. Branching flowchart. Install Graphviz so dot is on PATH:
      git-compose-commit --subject 'Branch' \
        --flow-chart 'direction=horizontal;float=left' \
        --flow-terminal 'start:Start' --flow-terminal 'done:Done' \
@@ -241,7 +285,7 @@ EXAMPLES
        ( Start )--------------->( Done )
        (-------)                (------)
 
-  10. Speech bubble with a chosen speaker and placement:
+  12. Speech bubble with a chosen speaker and placement:
       git-compose-commit --subject 'Bubble' --rand-seed=1 \
         --bubble 'speaker=cat;style=speech;phrase=Hi;bubble-side=center' \
         --stdout
@@ -257,7 +301,7 @@ EXAMPLES
         ( o.o )
          > ^ <
 
-  11. Thought bubble with a stick figure:
+  13. Thought bubble with a stick figure:
       git-compose-commit --subject 'Consider the change' --rand-seed=1 \
         --bubble \
         'speaker=stick-figure;style=thought;phrase=Maybe;bubble-side=center' \
@@ -274,7 +318,7 @@ EXAMPLES
            /|\
            / \
 
-  12. Combine paragraphs, fields, lists, and footers:
+  14. Combine paragraphs, fields, lists, and footers:
       git-compose-commit --subject 'Validate cache writes' \
         --text 'Check input before publishing [#1].' \
         --field 'Result:ready' --bullets --list-item 'Parse' \

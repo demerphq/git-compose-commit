@@ -292,15 +292,18 @@ fn help_example(guide: &str, number: usize) -> Option<String> {
 
 fn topic_help(topic: &str) -> Result<String, String> {
     let (sections, examples): (&[&str], &[usize]) = match topic {
-        "message" => (&["HOW IT WORKS", "MESSAGE OPTIONS"], &[1, 3, 12]),
+        "message" => (&["HOW IT WORKS", "MESSAGE OPTIONS"], &[1, 3, 14]),
         "output" => (&["OUTPUT AND CONTROL"], &[2]),
         "tables" => (&["TABLES"], &[4]),
         "lists" => (&["LISTS"], &[5]),
         "footers" => (&["FOOTERS"], &[6]),
-        "charts" => (&["BAR CHARTS"], &[7]),
-        "flowcharts" => (&["LINEAR FLOW CHARTS", "BRANCHING FLOWCHARTS"], &[8, 9]),
-        "bubbles" => (&["SPEECH AND THOUGHT BUBBLES"], &[10, 11]),
-        "examples" => (&[], &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]),
+        "charts" => (&["BAR CHARTS"], &[7, 8]),
+        "flowcharts" => (
+            &["LINEAR FLOW CHARTS", "BRANCHING FLOWCHARTS"],
+            &[9, 10, 11],
+        ),
+        "bubbles" => (&["SPEECH AND THOUGHT BUBBLES"], &[12, 13]),
+        "examples" => (&[], &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]),
         _ => {
             return Err(format!(
                 "unknown help topic '{topic}'; choose message, output, tables, lists, footers, charts, flowcharts, bubbles, or examples"

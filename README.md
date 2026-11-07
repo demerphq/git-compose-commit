@@ -1,7 +1,9 @@
 # git-compose-commit
 
 Build a clear, structured commit message from command-line options, then pass
-it to `git commit`. Compose options can be mixed with Git commit options.
+it to `git commit`.  Alongside wrapped prose, lists, and tables, it can draw
+charts and crucially talking ASCII animals for that whimsical flourish a good
+commit needs.  Compose options can be mixed with Git commit options.
 
 ```sh
 git-compose-commit \
@@ -35,24 +37,35 @@ its `dot` command on your `PATH` (for example, `brew install graphviz`). Use
 `git-compose-commit --help`, `--help=long`, or `--man` for the detailed guide
 with examples and their output. Use `--version` to print the installed version.
 
-To focus on one subject, use `--help=TOPIC`, for example `--help=bubbles`,
-`--help=tables`, or `--help=flowcharts`. `--help=examples` shows only the
-example commands and their output. Use `-h` to see the full topic list.
+To focus on one subject, use `--help=TOPIC`. Available topics are `message`,
+`output`, `tables`, `lists`, `footers`, `charts`, `flowcharts`, `bubbles`, and
+`examples`. For instance, `--help=tables` shows the table options and table
+example, while `--help=examples` gathers commands with their output. Use `-h`
+to see the quick synopsis and topic list.
 
-To preview a composed message without creating a commit, use `--stdout`:
+## Preview and commit
+
+By default, `git-compose-commit` builds the message and runs `git commit`.
+To inspect the message first, use `--stdout`:
 
 ```sh
 git-compose-commit --subject 'Preview this message' --text 'No commit is made.' --stdout
 ```
 
-Use `--output FILE` to write the message to a file instead:
+The preview is printed; Git is not invoked and no commit is created. Once
+you are happy with it, run your command again without `--stdout` to commit.
+
+Use `--output FILE` to write the message to a file instead. **This also skips
+`git commit`**: it does not both write the file and create a commit.
 
 ```sh
-git-compose-commit --subject 'Preview this message' --text 'No commit is made.' --output /tmp/message.txt
+git-compose-commit --subject 'Preview this message' \
+  --text 'No commit is made.' --output /tmp/message.txt
 ```
 
-The namespaced forms are `--compose-stdout` and `--compose-output`. Neither
-output mode can be combined with Git commit options.
+`--output` overwrites an existing file. Neither output mode can be combined
+with Git commit options such as `--all` or `--signoff`, and the two output
+modes cannot be combined with each other.
 
 ## User defaults
 
@@ -104,6 +117,30 @@ the option or use `=`:
 --text='A paragraph of prose.'
 ```
 
+`--detail` keeps line breaks and indents every line; `--line` keeps one line
+unwrapped. For example:
+
+```sh
+git-compose-commit --subject 'Document runtime settings' \
+  --text 'Keep the current defaults.' \
+  --detail 'BACKEND=sqlite
+RETRIES=3' \
+  --line 'Reviewed-by: Ada' --stdout
+```
+
+Output:
+
+```text
+Document runtime settings
+
+Keep the current defaults.
+
+    BACKEND=sqlite
+    RETRIES=3
+
+Reviewed-by: Ada
+```
+
 Words longer than the wrap margin are kept intact. `--wrap-width` also sets
 the alignment margin for charts and bubbles, and the wrapping width for lists,
 fields, callouts, and footers. Literal `--detail` and `--line` content stays
@@ -121,30 +158,55 @@ git-compose-commit \
   --subject 'Document runtime settings' \
   --field 'Backend:sqlite' \
   --field 'Endpoint:https://example.test/api' \
-  --field 'Retries:3'
+  --field 'Retries:3' --stdout
 ```
 
 This renders as:
 
 ```text
+Document runtime settings
+
 Backend : sqlite
 Endpoint: https://example.test/api
-Retries:  3
+Retries : 3
 ```
 
 Use `--note` or `--warning` for labeled prose. Their continuation lines align
 with the start of the text:
 
+```sh
+git-compose-commit --subject 'Migration note' \
+  --note 'Existing config files remain compatible.' \
+  --warning 'The legacy index is removed.' --stdout
+```
+
+Output:
+
 ```text
-Note:    Existing config files remain compatible.
-Warning: This migration removes the legacy index.
+Migration note
+
+Note: Existing config files remain compatible.
+
+Warning: The legacy index is removed.
 ```
 
 The global `--wrap-width` option changes the default 72-column margin for
 wrapped content and alignment:
 
 ```sh
-git-compose-commit --wrap-width=60 --text 'Wrap this paragraph at 60 columns.'
+git-compose-commit --subject 'Wrap this paragraph' --wrap-width=30 \
+  --text 'This deliberately long sentence will wrap at the selected message margin.' \
+  --stdout
+```
+
+Output:
+
+```text
+Wrap this paragraph
+
+This deliberately long
+sentence will wrap at the
+selected message margin.
 ```
 
 ## Tables
@@ -157,12 +219,14 @@ git-compose-commit \
   --subject 'Record cache status' \
   --th 'Name,State' \
   --tr 'cache,ready' \
-  --tr 'worker,waiting'
+  --tr 'worker,waiting' --stdout
 ```
 
 The table section looks like this:
 
 ```text
+Record cache status
+
 +--------+---------+
 | Name   | State   |
 +--------+---------+
@@ -187,97 +251,184 @@ quoting and escaping within a cell are not supported.
 
 ## ASCII bar charts
 
-Use `--hbar-chart` or `--vbar-chart` to add a horizontal or vertical ASCII
-chart. Data items are comma-separated `label:value` pairs, and at least two
-items are required. Without chart settings, pass the data list directly:
+Use `--hbar-chart` for bars extending to the right. Each data item is a
+`label:value` pair; `width=10` sets the longest bar to ten `#` characters:
 
 ```sh
---hbar-chart='tests:10,docs:5,review:3'
+git-compose-commit --subject 'Test coverage' \
+  --hbar-chart 'float=left;width=10;data=tests:10,docs:5,review:3' \
+  --stdout
 ```
 
-When setting chart options, clauses are separated by semicolons and the data
-list must use `data=`:
+Output:
+
+```text
+Test coverage
+
+tests  | ########## 10
+docs   | ##### 5
+review | ### 3
+```
+
+Use `--vbar-chart` for upright bars. `height=5` sets the tallest bar to five
+rows:
 
 ```sh
---vbar-chart='float=right;height=8;data=tests:10,docs:5,review:3'
+git-compose-commit --subject 'Test coverage' \
+  --vbar-chart 'float=left;height=5;data=tests:10,docs:5' --stdout
 ```
 
-`float` aligns the chart block within the message margin (72 columns by
-default; see `--wrap-width`) and defaults to `center`. Vertical charts accept
-`height` (default 6); horizontal charts
-accept `width` (default 24). The largest value scales to the selected size.
-Chart sizes range from 1 to 256. Values must be non-negative whole numbers.
-Labels may not contain commas or semicolons, which are delimiters in this
-syntax.
+Output:
+
+```text
+Test coverage
+
+10 |   #
+   |   #
+   |   #     #
+   |   #     #
+   |   #     #
+ 0 +------------
+     tests docs
+```
+
+For either chart, use at least two comma-separated items with non-negative
+whole-number values. Pass a bare list such as
+`--hbar-chart='tests:10,docs:5'` when no settings are needed. With settings,
+separate clauses with semicolons and put the list after `data=`. `float` places
+the chart at the `left`, `center` (default), or `right` of the message margin.
+The default horizontal width is 24; the default vertical height is 6. Both
+sizes accept 1–256. Labels cannot contain commas or semicolons.
 
 ## ASCII flow charts
 
-Use `--hflow-chart` or `--vflow-chart` to render a straight chain of labeled
-boxes. The syntax follows the bar charts: a bare comma-separated label list,
-or semicolon-separated settings with a required `data=` list.
+Use `--hflow-chart` for a straight chain of boxes from left to right:
 
 ```sh
---hflow-chart='float=center;data=Parse,Validate,Commit'
---vflow-chart='Input,Transform,Output'
+git-compose-commit --subject 'Release flow' \
+  --hflow-chart 'float=left;data=Parse,Validate,Commit' --stdout
 ```
 
-These linear flow charts default to centered alignment. Labels stay on one
-line and are sized to fit the widest box. At least two labels are required.
+Output:
+
+```text
+Release flow
+
++----------+     +----------+     +----------+
+|  Parse   | --> | Validate | --> |  Commit  |
++----------+     +----------+     +----------+
+```
+
+Use `--vflow-chart` to stack the boxes:
+
+```sh
+git-compose-commit --subject 'Release flow' \
+  --vflow-chart 'float=left;data=Input,Transform,Output' --stdout
+```
+
+Output:
+
+```text
+Release flow
+
++-----------+
+|   Input   |
++-----------+
+      |
+      v
++-----------+
+| Transform |
++-----------+
+      |
+      v
++-----------+
+|  Output   |
++-----------+
+```
+
+Both options need at least two comma-separated labels. Pass labels directly
+when no settings are needed, as in `--vflow-chart='Input,Output'`. With
+settings, separate clauses with semicolons and use `data=` for the labels.
+`float=left|center|right` places the diagram in the message margin; the
+default is `center`. Labels stay on one line and boxes share a width.
 
 ## Branching flowcharts
 
-Use `--flow-chart` to start a graph, then define nodes and links with repeated
-options. The graph is rendered as one message block and closes when the next
-non-flowchart option appears or the arguments end:
+When the path splits, use `--flow-chart`. Give each shape a short ID, then
+connect the IDs with `--flow-edge`. This example sends valid input one way and
+invalid input another:
 
 ```sh
 git-compose-commit \
-  --subject 'Validate uploads before saving' \
-  --flow-chart='direction=vertical;float=center;nodesep=0.8;ranksep=1.0' \
+  --subject 'Choose a path' \
+  --flow-chart 'direction=vertical;float=left' \
   --flow-terminal='start:Start' \
-  --flow-node='read:Read input' \
   --flow-decision='valid:Valid?' \
   --flow-node='save:Save' \
-  --flow-node='reject:Report error' \
-  --flow-terminal='done:Done' \
-  --flow-edge='start -> read' \
-  --flow-edge='read -> valid' \
+  --flow-node='reject:Reject' \
+  --flow-edge='start -> valid' \
   --flow-edge='valid -> save [label="yes"]' \
   --flow-edge='valid -> reject [label="no"]' \
-  --flow-edge='save -> done' \
-  --flow-edge='reject -> done' \
-  --output /tmp/message.txt
+  --stdout
 ```
 
-Node IDs start with a letter or underscore and contain only letters, digits,
-and underscores. `--flow-node` makes a box, `--flow-decision` a diamond, and
-`--flow-terminal` an oval start/end node. Edge arguments use DOT-style directed
-links, for example `FROM -> TO`; labels use DOT-style `[label="TEXT"]`
-attributes. Unlabeled chains such as `A -> B -> C` are also accepted. The
-wrapper generates DOT internally; arbitrary DOT source is not accepted. Set
-`direction=vertical|horizontal`, `float=left|center|right`, and optionally
-`nodesep=N` and `ranksep=N` (each greater than zero and at most 10). Direction
-defaults to vertical, float defaults to center, and spacing defaults are 0.8
-and 1.0. A graph needs at least two declared nodes and one edge. Nested graphs
-are not supported. Branching diagrams are laid out with Graphviz, which must
-be installed and available as `dot`. Only Graphviz's choice of rank and
-ordering for each node is used; spacing and edge routing are computed by
-`git-compose-commit`, so a diagram renders the same with any Graphviz release.
-A graph with an edge that skips a rank or points back up falls back to
-Graphviz's own positions, which can vary between releases.
-In horizontal graphs, branches from one node align their turn columns. If
-their labels differ, they take separate paths; edges merging into one node
-share a vertical column.
+Output:
+
+```text
+Choose a path
+
+         (-------)
+         ( Start )
+         (-------)
+             |
+             |
+             |
+             |
+             v
+        /--------\
+        | Valid? |
+        \--------/
+             |
+    +--------+--------+
+    | yes             | no
+    |                 |
+    v                 v
++------+         +--------+
+| Save |         | Reject |
++------+         +--------+
+```
+
+The pieces are:
+
+| Option | Draws or does |
+| --- | --- |
+| `--flow-chart` | Starts the diagram and sets its direction and placement. |
+| `--flow-node ID:TEXT` | Adds a box. |
+| `--flow-decision ID:TEXT` | Adds a decision shape. |
+| `--flow-terminal ID:TEXT` | Adds a rounded start or end shape. |
+| `--flow-edge 'FROM -> TO'` | Connects two shapes. Add `[label="yes"]` when the arrow needs a label. |
+
+Use `direction=horizontal` to run the diagram from left to right, or
+`direction=vertical` (the default) for top to bottom. `float=left|center|right`
+places the diagram within the message margin; the default is `center`.
+`nodesep=N` and `ranksep=N` adjust spacing. Their defaults are 0.8 and 1.0,
+and both accept numbers greater than zero through 10.
+
+IDs begin with a letter or underscore, followed by letters, digits, or
+underscores. You need at least two nodes and one edge. You can write a chain
+as `A -> B -> C`, and add more nodes and edges by repeating the options. The
+next non-flowchart message option ends the diagram. Graphs cannot be nested.
+
+This feature needs Graphviz's `dot` command. The tool asks Graphviz for node
+order, then lays out ordinary forward arrows itself. For links that skip a
+level or point backwards, it uses Graphviz's positions; those diagrams may
+look different across Graphviz versions. It builds DOT internally, so the
+options accept the forms shown here rather than arbitrary DOT source.
 
 ## Speech and thought bubbles
 
 Use `--bubble` to draw a phrase with an ASCII speaker avatar. The phrase may
-contain spaces; separate clauses with semicolons:
-
-```sh
---bubble='speaker=cat;phrase=Mooooo;float=center'
---bubble='speaker=stick-figure;style=thought;phrase=Maybe'
-```
+contain spaces; separate clauses with semicolons.
 
 For a speech bubble above the cat:
 
@@ -299,6 +450,31 @@ A quick note
  /\_/\
 ( o.o )
  > ^ <
+```
+
+The cat cannot review the patch, sadly.
+
+For a thought bubble, the tail becomes a trail of little circles. The stick
+figure looks suitably contemplative:
+
+```sh
+git-compose-commit --subject 'Consider the change' \
+  --bubble 'speaker=stick-figure;style=thought;phrase=Maybe;speaker-side=below;bubble-side=center;float=left' \
+  --stdout
+```
+
+Output:
+
+```text
+Consider the change
+
+( Maybe )
+    O
+    o
+    .
+    O
+   /|\
+   / \
 ```
 
 Choose `speaker=cat`, `speaker=dog`, or `speaker=stick-figure`. The style
@@ -334,12 +510,14 @@ git-compose-commit \
   --bullets \
   --list-item 'Keep readers on the previous generation' \
   --list-end \
-  --list-item 'Advance the generation'
+  --list-item 'Advance the generation' --stdout
 ```
 
-This produces:
+Output:
 
 ```text
+Refresh the cache safely
+
 1. Write the new value
   * Keep readers on the previous generation
 2. Advance the generation
@@ -357,7 +535,8 @@ text with `--footer-N`:
 git-compose-commit \
   --subject 'Validate cache updates' \
   --text 'Publish the new generation only after validation [#1].' \
-  --footer-1 'Readers keep using the previous generation until then.'
+  --footer-1 'Readers keep using the previous generation until then.' \
+  --stdout
 ```
 
 The footer is appended to the message:
@@ -376,18 +555,21 @@ footers, unreferenced footers, and duplicate definitions are errors.
 References inside backtick-delimited code spans are treated as literal text.
 Only `--text` and `--line` are scanned for references.
 
-## Git options and paths
+## How this interacts with Git
 
-Other arguments are passed through to `git commit`, so you can mix them with
-compose options:
+When neither `--stdout` nor `--output` is present, the tool writes the
+composed message to a temporary file and runs `git commit -F` with that file.
+Git handles the commit normally, including its configured cleanup and hooks.
+Arguments the tool does not consume are passed to `git commit`, so you can
+mix Git options with message options:
 
 ```sh
 git-compose-commit --all --subject 'Refresh the cache' --signoff
 ```
 
-The composed message is supplied using Git's `-F` option. Do not pass Git
-message options such as `-m`, `--message`, or `--file` as they conflict with
-the generated message file.
+Do not pass Git message options such as `-m`, `--message`, or `--file`; they
+conflict with the generated message file. Use the compose options to build
+the message instead.
 
 `--` keeps its usual Git meaning: it ends option parsing and is passed through
 to Git. Arguments after it are pathspecs:

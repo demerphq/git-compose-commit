@@ -267,9 +267,9 @@ fn help_topics_show_only_relevant_reference_and_examples() {
         (
             "flowcharts",
             "BRANCHING FLOWCHARTS",
-            "9. Branching flowchart",
+            "11. Branching flowchart",
         ),
-        ("bubbles", "SPEECH AND THOUGHT BUBBLES", "10. Speech bubble"),
+        ("bubbles", "SPEECH AND THOUGHT BUBBLES", "12. Speech bubble"),
     ] {
         let output = run_composer(repo.path(), &[&format!("--help={topic}")]);
         assert!(output.status.success(), "{topic}: {output:?}");
@@ -282,12 +282,22 @@ fn help_topics_show_only_relevant_reference_and_examples() {
     let bubbles = run_composer(repo.path(), &["--help=bubbles"]);
     let bubbles = String::from_utf8(bubbles.stdout).unwrap();
     assert!(!bubbles.contains("--table-rows"));
-    assert!(bubbles.contains("11. Thought bubble"));
+    assert!(bubbles.contains("13. Thought bubble"));
+
+    let charts = run_composer(repo.path(), &["--help=charts"]);
+    let charts = String::from_utf8(charts.stdout).unwrap();
+    assert!(charts.contains("8. Vertical bar chart"));
+
+    let flowcharts = run_composer(repo.path(), &["--help=flowcharts"]);
+    let flowcharts = String::from_utf8(flowcharts.stdout).unwrap();
+    assert!(flowcharts.contains("10. Vertical flow chart"));
 
     let examples = run_composer(repo.path(), &["--help=examples"]);
     let examples = String::from_utf8(examples.stdout).unwrap();
     assert!(examples.contains("1. Basic commit"));
-    assert!(examples.contains("12. Combine paragraphs"));
+    assert!(examples.contains("8. Vertical bar chart"));
+    assert!(examples.contains("10. Vertical flow chart"));
+    assert!(examples.contains("14. Combine paragraphs"));
     assert!(!examples.contains("MESSAGE OPTIONS"));
 
     let unknown = run_composer(repo.path(), &["--help=unknown"]);
