@@ -22,7 +22,7 @@ try {
     Expand-Archive -LiteralPath $file -DestinationPath (Join-Path $tempDir 'unpacked')
     New-Item -ItemType Directory -Force $InstallDir | Out-Null
     Copy-Item (Join-Path $tempDir 'unpacked\git-compose-commit.exe') (Join-Path $InstallDir 'git-compose-commit.exe') -Force
-    Copy-Item (Join-Path $tempDir 'unpacked\compose-text.exe') (Join-Path $InstallDir 'compose-text.exe') -Force
+    Copy-Item (Join-Path $tempDir 'unpacked\cli-compose-text.exe') (Join-Path $InstallDir 'cli-compose-text.exe') -Force
     Write-Output "Installed to $InstallDir. Ensure it is on your PATH."
 } finally {
     Remove-Item -Recurse -Force $tempDir

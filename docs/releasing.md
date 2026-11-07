@@ -4,7 +4,7 @@ Nothing in this document has been published yet. The repository includes a
 manual GitHub Actions workflow that builds five native-runner targets: Linux
 x86-64 and ARM64 (musl), macOS Intel and Apple Silicon, and Windows x86-64.
 Graphviz remains an optional external dependency for branching flowcharts.
-Each archive and installer includes both `compose-text` and
+Each archive and installer includes both `cli-compose-text` and
 `git-compose-commit`.
 
 ## Why this workflow

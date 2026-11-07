@@ -168,7 +168,7 @@ justify another setting.
 Investigate a lightweight internal abstraction allowing generated fragments
 to appear inside existing fields and table cells.
 
-**Investigated:** compose-text can generate a fragment for ordinary shell
+**Investigated:** cli-compose-text can generate a fragment for ordinary shell
 command substitution in a field or table cell. This works with sparklines,
 progress bars, and badges without adding a second interpolation language; see
 the reference example. **Paused for review:** a separate structured

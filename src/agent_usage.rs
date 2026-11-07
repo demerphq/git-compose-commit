@@ -8,40 +8,44 @@ const SKILLS: &[(&str, &str)] = &[
         include_str!("../skills/git-compose-commit/SKILL.md"),
     ),
     (
-        "git-compose-message",
-        include_str!("../skills/git-compose-message/SKILL.md"),
+        "cli-compose-text",
+        include_str!("../skills/cli-compose-text/SKILL.md"),
     ),
     (
-        "git-compose-output",
-        include_str!("../skills/git-compose-output/SKILL.md"),
+        "cli-compose-message",
+        include_str!("../skills/cli-compose-message/SKILL.md"),
     ),
     (
-        "git-compose-tables",
-        include_str!("../skills/git-compose-tables/SKILL.md"),
+        "cli-compose-output",
+        include_str!("../skills/cli-compose-output/SKILL.md"),
     ),
     (
-        "git-compose-lists",
-        include_str!("../skills/git-compose-lists/SKILL.md"),
+        "cli-compose-tables",
+        include_str!("../skills/cli-compose-tables/SKILL.md"),
     ),
     (
-        "git-compose-footers",
-        include_str!("../skills/git-compose-footers/SKILL.md"),
+        "cli-compose-lists",
+        include_str!("../skills/cli-compose-lists/SKILL.md"),
     ),
     (
-        "git-compose-charts",
-        include_str!("../skills/git-compose-charts/SKILL.md"),
+        "cli-compose-footers",
+        include_str!("../skills/cli-compose-footers/SKILL.md"),
     ),
     (
-        "git-compose-flowcharts",
-        include_str!("../skills/git-compose-flowcharts/SKILL.md"),
+        "cli-compose-charts",
+        include_str!("../skills/cli-compose-charts/SKILL.md"),
     ),
     (
-        "git-compose-visuals",
-        include_str!("../skills/git-compose-visuals/SKILL.md"),
+        "cli-compose-flowcharts",
+        include_str!("../skills/cli-compose-flowcharts/SKILL.md"),
     ),
     (
-        "git-compose-bubbles",
-        include_str!("../skills/git-compose-bubbles/SKILL.md"),
+        "cli-compose-visuals",
+        include_str!("../skills/cli-compose-visuals/SKILL.md"),
+    ),
+    (
+        "cli-compose-bubbles",
+        include_str!("../skills/cli-compose-bubbles/SKILL.md"),
     ),
 ];
 

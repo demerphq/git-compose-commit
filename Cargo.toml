@@ -36,5 +36,5 @@ name = "git-compose-commit"
 path = "src/main.rs"
 
 [[bin]]
-name = "compose-text"
-path = "src/compose_text.rs"
+name = "cli-compose-text"
+path = "src/cli_compose_text.rs"

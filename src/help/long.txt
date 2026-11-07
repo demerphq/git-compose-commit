@@ -4,7 +4,7 @@ Usage: git-compose-commit [COMPOSE OPTIONS] [GIT OPTIONS] [-- PATHSPEC...]
 
 HOW IT WORKS
 
-  compose-text uses the same message options and writes to stdout or a file
+  cli-compose-text uses the same message options and writes to stdout or a file
   without invoking Git. This command wraps the composer and Git together.
 
   The subject is first. Other sections keep argument order and are separated
@@ -387,7 +387,7 @@ EXAMPLES
         [#1] Readers see only valid data.
 
   15. Heading and badges:
-      compose-text --subject 'Ready' \
+      cli-compose-text --subject 'Ready' \
         --banner 'text=RELEASE;style=box;width=11;float=left' \
         --badges 'labels=TESTED,READY;float=left'
 

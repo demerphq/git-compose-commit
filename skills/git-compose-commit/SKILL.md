@@ -10,7 +10,7 @@ Create a commit only when authorized. Inspect the staged changes and local
 commit conventions first. Choose an imperative, concrete subject and explain
 the change and its reason where useful.
 
-Preview with compose-text --subject 'Summarize the change' --text 'Explain why
+Preview with cli-compose-text --subject 'Summarize the change' --text 'Explain why
 it matters.' It writes to stdout without invoking Git; --output writes a file.
 Check the result, then use git-compose-commit with the same message options and
 the intended Git options when a commit is authorized. Git hooks and cleanup can

@@ -23,7 +23,7 @@ if not re.fullmatch(r"[a-zA-Z0-9_-]+", args.target):
     parser.error("invalid target")
 windows = args.target.endswith("-windows-msvc")
 binary_name = "git-compose-commit.exe" if windows else "git-compose-commit"
-text_binary_name = "compose-text.exe" if windows else "compose-text"
+text_binary_name = "cli-compose-text.exe" if windows else "cli-compose-text"
 if not args.binary.is_file() or not args.text_binary.is_file():
     parser.error("both binaries must exist")
 args.out.mkdir(parents=True, exist_ok=True)

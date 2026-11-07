@@ -52,7 +52,7 @@ print(f'''class GitComposeCommit < Formula
   end
 
   def install
-    bin.install "git-compose-commit", "compose-text"
+    bin.install "git-compose-commit", "cli-compose-text"
   end
 
   test do

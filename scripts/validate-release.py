@@ -28,12 +28,12 @@ for target in targets:
         with zipfile.ZipFile(archive) as packed:
             members = set(packed.namelist())
         binary = "git-compose-commit.exe"
-        text_binary = "compose-text.exe"
+        text_binary = "cli-compose-text.exe"
     else:
         with tarfile.open(archive, "r:gz") as packed:
             members = set(packed.getnames())
             binary = "git-compose-commit"
-            text_binary = "compose-text"
+            text_binary = "cli-compose-text"
             if not all(packed.getmember(name).mode & 0o111 for name in (binary, text_binary)):
                 raise SystemExit(f"binary is not executable: {name}")
     if members != {binary, text_binary, "README.md", "LICENSE", "THIRD-PARTY-LICENSES.txt", "extract-agent-skills.py"}:

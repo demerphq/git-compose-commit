@@ -4,7 +4,7 @@ A CLI for composing well-formatted Git commit messages, designed for humans
 and AI coding agents.
 
 `git commit -m` is handy until a message needs several paragraphs, lists, or
-other structure. `compose-text` builds formatted text from command-line
+other structure. `cli-compose-text` builds formatted text from command-line
 arguments; `git-compose-commit` uses the same composer and passes the result
 to Git. There is no AI service
 involved: an agent writes the content; this tool formats it. Bubble choices
@@ -15,7 +15,7 @@ can be random; set them explicitly or use a seed for repeatable output.
 Preview a message before committing:
 
 ```sh
-compose-text --subject 'Refresh cache after writes' \
+cli-compose-text --subject 'Refresh cache after writes' \
   --text 'Keep readers on the previous generation until the new value passes validation.' \
   --bullets --list-item 'Validate the new value' \
   --list-item 'Publish the new generation' \
@@ -36,7 +36,7 @@ validation.
 Fixes: #123
 ```
 
-`compose-text` writes to stdout by default; use `--output FILE` to write a
+`cli-compose-text` writes to stdout by default; use `--output FILE` to write a
 file. It never invokes Git. To create an authorized commit, use the same
 message options with `git-compose-commit`, adding any Git options you need.
 The wrapper also retains its `--stdout` and `--output` preview modes.
@@ -84,7 +84,7 @@ respect project conventions and do not authorize commits by themselves.
 - [Complete usage reference and examples](docs/reference.md)
 - [Agent integration and skill export convention](docs/agents.md)
 - [Release preparation](docs/releasing.md)
-- `compose-text --help` for the text-only interface.
+- `cli-compose-text --help` for the text-only interface.
 - `git-compose-commit -h` for a quick synopsis; `--help` or `--man` for the
   full guide; `--help=TOPIC` for a focused guide such as `--help=flowcharts`.
 

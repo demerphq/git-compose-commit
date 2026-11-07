@@ -10,7 +10,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = tomllib.loads((ROOT / "Cargo.toml").read_text())["package"]["version"]
 BINARY = ROOT / "target/debug/git-compose-commit"
-TEXT_BINARY = ROOT / "target/debug/compose-text"
+TEXT_BINARY = ROOT / "target/debug/cli-compose-text"
 TARGETS = [
     "x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl",
     "x86_64-apple-darwin", "aarch64-apple-darwin", "x86_64-pc-windows-msvc",
@@ -41,7 +41,7 @@ class DistributionTests(unittest.TestCase):
             subprocess.run(command, cwd=ROOT, env=env, check=True, capture_output=True)
             installed = dest / "git-compose-commit"
             self.assertEqual(installed.read_bytes(), BINARY.read_bytes())
-            self.assertEqual((dest / "compose-text").read_bytes(), TEXT_BINARY.read_bytes())
+            self.assertEqual((dest / "cli-compose-text").read_bytes(), TEXT_BINARY.read_bytes())
             archive = dist / f"git-compose-commit-v{VERSION}-x86_64-unknown-linux-musl.tar.gz"
             archive.write_bytes(archive.read_bytes() + b"tampered")
             invalid = subprocess.run(["python3", "scripts/validate-release.py", str(dist)],

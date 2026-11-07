@@ -1,8 +1,9 @@
 # Agent integration
 
-The executable includes ten [Agent Skills](https://agentskills.io/specification):
-a general skill and focused skills for message composition, output, tables,
-lists, footers, charts, flowcharts, visual decorations, and bubbles. They tell agents when and how
+Both executables include the same eleven [Agent Skills](https://agentskills.io/specification):
+one cover skill for general text, one for Git commits, and focused skills for
+message composition, output, tables, lists, footers, charts, flowcharts,
+visual decorations, and bubbles. They tell agents when and how
 to use the tool; `--help=TOPIC` supplies detailed syntax and examples.
 
 List and inspect skills without invoking Git or loading user configuration:

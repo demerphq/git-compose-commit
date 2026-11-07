@@ -3687,11 +3687,11 @@ fn run_compose_text_inner() -> Result<ExitCode, String> {
     if args.len() == 1 {
         match args[0].to_str() {
             Some("-h" | "--help" | "--help=short" | "--help=long" | "--man") => {
-                println!("{}", include_str!("help/compose-text.txt").trim_end());
+                println!("{}", include_str!("help/cli-compose-text.txt").trim_end());
                 return Ok(ExitCode::SUCCESS);
             }
             Some("--version") => {
-                println!("compose-text {}", env!("CARGO_PKG_VERSION"));
+                println!("cli-compose-text {}", env!("CARGO_PKG_VERSION"));
                 return Ok(ExitCode::SUCCESS);
             }
             Some(value) if value.starts_with("--help=") => {
@@ -3700,7 +3700,7 @@ fn run_compose_text_inner() -> Result<ExitCode, String> {
                     "Use --help=long for the complete guide.",
                     "Use git-compose-commit --help for the complete guide.",
                 );
-                println!("Some examples use git-compose-commit; omit Git options for compose-text.\n\n{help}");
+                println!("Some examples use git-compose-commit; omit Git options for cli-compose-text.\n\n{help}");
                 return Ok(ExitCode::SUCCESS);
             }
             _ => {}
@@ -3709,7 +3709,9 @@ fn run_compose_text_inner() -> Result<ExitCode, String> {
     let (target, args) = extract_output_option(args)?;
     let (message, git_args) = compose(args)?;
     if !git_args.is_empty() {
-        return Err("compose-text accepts message options only, not Git options or paths".into());
+        return Err(
+            "cli-compose-text accepts message options only, not Git options or paths".into(),
+        );
     }
     match target.unwrap_or(OutputTarget::Stdout) {
         OutputTarget::File(path) => fs::write(&path, message).map_err(|error| {
@@ -3727,8 +3729,8 @@ pub fn run_compose_text() -> ExitCode {
     match run_compose_text_inner() {
         Ok(code) => code,
         Err(error) => {
-            eprintln!("compose-text: {error}");
-            eprintln!("Try 'compose-text --help' for details.");
+            eprintln!("cli-compose-text: {error}");
+            eprintln!("Try 'cli-compose-text --help' for details.");
             ExitCode::from(2)
         }
     }

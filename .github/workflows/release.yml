@@ -54,7 +54,7 @@ jobs:
           set -eu
           VERSION=$(python -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
           BINARY="target/$TARGET/release/git-compose-commit"
-          TEXT_BINARY="target/$TARGET/release/compose-text"
+          TEXT_BINARY="target/$TARGET/release/cli-compose-text"
           if [ "$RUNNER_OS" = Windows ]; then BINARY="$BINARY.exe"; TEXT_BINARY="$TEXT_BINARY.exe"; fi
           "$BINARY" --version
           "$TEXT_BINARY" --version
@@ -78,7 +78,7 @@ jobs:
           export GIT_COMPOSE_COMMIT_INSTALL_DIR="$RUNNER_TEMP/installed-bin"
           sh scripts/install.sh "v$VERSION"
           cmp "target/$TARGET/release/git-compose-commit" "$GIT_COMPOSE_COMMIT_INSTALL_DIR/git-compose-commit"
-          cmp "target/$TARGET/release/compose-text" "$GIT_COMPOSE_COMMIT_INSTALL_DIR/compose-text"
+          cmp "target/$TARGET/release/cli-compose-text" "$GIT_COMPOSE_COMMIT_INSTALL_DIR/cli-compose-text"
           "$GIT_COMPOSE_COMMIT_INSTALL_DIR/git-compose-commit" --version
       - name: Smoke test PowerShell installer
         if: runner.os == 'Windows'
@@ -97,8 +97,8 @@ jobs:
             $built = Get-FileHash target/x86_64-pc-windows-msvc/release/git-compose-commit.exe
             $installed = Get-FileHash (Join-Path $installDir 'git-compose-commit.exe')
             if ($built.Hash -ne $installed.Hash) { throw 'Installed binary differs from build' }
-            $builtText = Get-FileHash target/x86_64-pc-windows-msvc/release/compose-text.exe
-            $installedText = Get-FileHash (Join-Path $installDir 'compose-text.exe')
+            $builtText = Get-FileHash target/x86_64-pc-windows-msvc/release/cli-compose-text.exe
+            $installedText = Get-FileHash (Join-Path $installDir 'cli-compose-text.exe')
             if ($builtText.Hash -ne $installedText.Hash) { throw 'Installed text binary differs from build' }
             & (Join-Path $installDir 'git-compose-commit.exe') --version
             if ($LASTEXITCODE -ne 0) { throw 'Installed binary failed' }

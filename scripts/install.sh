@@ -27,10 +27,10 @@ else
     echo "sha256sum or shasum is required" >&2; exit 1
 fi
 [ "$actual" = "$expected" ] || { echo "Checksum mismatch" >&2; exit 1; }
-tar -xzf "$tempdir/$archive" -C "$tempdir" git-compose-commit compose-text
+tar -xzf "$tempdir/$archive" -C "$tempdir" git-compose-commit cli-compose-text
 destination=${GIT_COMPOSE_COMMIT_INSTALL_DIR:-"$HOME/.local/bin"}
 mkdir -p "$destination"
 install -m 755 "$tempdir/git-compose-commit" "$destination/git-compose-commit"
-install -m 755 "$tempdir/compose-text" "$destination/compose-text"
-echo "Installed git-compose-commit and compose-text in $destination"
+install -m 755 "$tempdir/cli-compose-text" "$destination/cli-compose-text"
+echo "Installed git-compose-commit and cli-compose-text in $destination"
 echo "Ensure $destination is on your PATH."

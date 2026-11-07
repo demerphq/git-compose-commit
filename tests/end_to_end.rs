@@ -557,7 +557,7 @@ fn agent_skills_are_standalone_deterministic_and_extractable() {
         .unwrap()
         .lines()
         .collect::<Vec<_>>();
-    assert_eq!(names.len(), 10);
+    assert_eq!(names.len(), 11);
     let mut files = fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/skills"))
         .unwrap()
         .map(|entry| entry.unwrap().file_name().into_string().unwrap())
@@ -579,6 +579,13 @@ fn agent_skills_are_standalone_deterministic_and_extractable() {
     let repeated = run_composer(repo.path(), &["--agent-usage-show-skill=ALL"]);
     assert!(all.status.success());
     assert_eq!(all.stdout, repeated.stdout);
+    let text_all = Command::new(env!("CARGO_BIN_EXE_cli-compose-text"))
+        .arg("--agent-usage-show-skill=ALL")
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+    assert!(text_all.status.success());
+    assert_eq!(all.stdout, text_all.stdout);
     let destination = repo.path().join("extracted");
     let mut child = Command::new("python3")
         .arg(concat!(
@@ -616,6 +623,13 @@ fn agent_skills_are_standalone_deterministic_and_extractable() {
         assert!(!failure.status.success(), "{args:?}");
         assert!(failure.stdout.is_empty(), "{args:?}");
         assert!(!failure.stderr.is_empty(), "{args:?}");
+        let text_failure = Command::new(env!("CARGO_BIN_EXE_cli-compose-text"))
+            .args(&args)
+            .current_dir(repo.path())
+            .output()
+            .unwrap();
+        assert!(!text_failure.status.success(), "{args:?}");
+        assert!(text_failure.stdout.is_empty(), "{args:?}");
     }
     let ordinary = run_composer(
         repo.path(),
@@ -634,7 +648,7 @@ fn compose_text_writes_without_invoking_git_and_matches_wrapper() {
         "--text",
         "Keep readers updated.",
     ];
-    let text = Command::new(env!("CARGO_BIN_EXE_compose-text"))
+    let text = Command::new(env!("CARGO_BIN_EXE_cli-compose-text"))
         .args(options)
         .current_dir(repo.path())
         .output()
@@ -657,7 +671,7 @@ fn compose_text_writes_without_invoking_git_and_matches_wrapper() {
     assert_eq!(text.stdout, wrapper.stdout);
     assert_eq!(run_git(repo.path(), &["status", "--porcelain"]).stdout, b"");
     let destination = repo.path().join("message.txt");
-    let output = Command::new(env!("CARGO_BIN_EXE_compose-text"))
+    let output = Command::new(env!("CARGO_BIN_EXE_cli-compose-text"))
         .args(options)
         .arg("--output")
         .arg(&destination)
@@ -668,7 +682,7 @@ fn compose_text_writes_without_invoking_git_and_matches_wrapper() {
     assert!(output.stdout.is_empty());
     assert_eq!(fs::read(destination).unwrap(), text.stdout);
     for extra in ["--all", "--signoff", "--", "path"] {
-        let failure = Command::new(env!("CARGO_BIN_EXE_compose-text"))
+        let failure = Command::new(env!("CARGO_BIN_EXE_cli-compose-text"))
             .args(options)
             .arg(extra)
             .current_dir(repo.path())
@@ -677,20 +691,20 @@ fn compose_text_writes_without_invoking_git_and_matches_wrapper() {
         assert!(!failure.status.success(), "{extra}");
         assert!(failure.stdout.is_empty(), "{extra}");
     }
-    let help = Command::new(env!("CARGO_BIN_EXE_compose-text"))
+    let help = Command::new(env!("CARGO_BIN_EXE_cli-compose-text"))
         .arg("--help")
         .output()
         .unwrap();
     assert!(String::from_utf8_lossy(&help.stdout).contains("without invoking Git"));
-    let version = Command::new(env!("CARGO_BIN_EXE_compose-text"))
+    let version = Command::new(env!("CARGO_BIN_EXE_cli-compose-text"))
         .arg("--version")
         .output()
         .unwrap();
     assert_eq!(
         String::from_utf8(version.stdout).unwrap(),
-        format!("compose-text {}\n", env!("CARGO_PKG_VERSION"))
+        format!("cli-compose-text {}\n", env!("CARGO_PKG_VERSION"))
     );
-    let skills = Command::new(env!("CARGO_BIN_EXE_compose-text"))
+    let skills = Command::new(env!("CARGO_BIN_EXE_cli-compose-text"))
         .arg("--agent-usage-list-skills")
         .output()
         .unwrap();
@@ -698,7 +712,7 @@ fn compose_text_writes_without_invoking_git_and_matches_wrapper() {
         skills.stdout,
         run_composer(repo.path(), &["--agent-usage-list-skills"]).stdout
     );
-    let literal = Command::new(env!("CARGO_BIN_EXE_compose-text"))
+    let literal = Command::new(env!("CARGO_BIN_EXE_cli-compose-text"))
         .args(["--subject", "--stdout"])
         .current_dir(repo.path())
         .output()

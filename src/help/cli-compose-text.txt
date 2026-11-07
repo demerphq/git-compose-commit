@@ -1,13 +1,13 @@
-compose-text - build formatted text without invoking Git
+cli-compose-text - build formatted text without invoking Git
 
-Usage: compose-text [MESSAGE OPTIONS] [--output FILE | --stdout]
+Usage: cli-compose-text [MESSAGE OPTIONS] [--output FILE | --stdout]
 
 Writes the composed text to standard output by default. --output FILE writes
 to a file instead; --stdout makes the default explicit. Git options and paths
 are not accepted. Use git-compose-commit when you want to create a commit.
 
 Example:
-  compose-text --subject 'Refresh cache' --text 'Update readers.'
+  cli-compose-text --subject 'Refresh cache' --text 'Update readers.'
 
 Message options include --subject, --text, --detail, --line, --field, --note,
 --warning, --wrap-width, tables, lists, footers, charts, flowcharts and bubbles.

@@ -1,6 +1,6 @@
 # git-compose-commit
 
-The package also provides `compose-text`, which accepts the same message
+The package also provides `cli-compose-text`, which accepts the same message
 options and writes to stdout by default or to `--output FILE`. It never invokes
 Git and rejects Git options and paths. The examples below use the compatible
 `git-compose-commit` wrapper, which can create a commit or preview its message.
@@ -317,7 +317,7 @@ Use `--sparkline` for a compact series of finite numbers, including negative
 values. A bare list works, or use settings separated by semicolons:
 
 ```sh
-compose-text --sparkline 'float=left;label=Load;data=-2,0,2'
+cli-compose-text --sparkline 'float=left;label=Load;data=-2,0,2'
 ```
 
 Output:
@@ -330,8 +330,8 @@ The output can also be used as a field or table cell with ordinary shell
 command substitution. This avoids introducing a separate interpolation syntax:
 
 ```sh
-compose-text --table-head 'Metric,Trend' \
-  --table-row "Load,$(compose-text --sparkline 'float=left;data=-2,0,2')"
+cli-compose-text --table-head 'Metric,Trend' \
+  --table-row "Load,$(cli-compose-text --sparkline 'float=left;data=-2,0,2')"
 ```
 
 Output:
@@ -353,7 +353,7 @@ reduce the number of values or increase `--wrap-width`.
 and `float` settings:
 
 ```sh
-compose-text --progress 'float=left;label=Migration;width=5;value=2/5'
+cli-compose-text --progress 'float=left;label=Migration;width=5;value=2/5'
 ```
 
 Output:
@@ -527,7 +527,7 @@ the end of the arguments or before another message section.
 For a checklist, repeat `--checklist-item` with `done:TEXT` or `todo:TEXT`:
 
 ```sh
-compose-text --checklist-item 'done:Schema' --checklist-item 'todo:Backfill'
+cli-compose-text --checklist-item 'done:Schema' --checklist-item 'todo:Backfill'
 ```
 
 Output:
@@ -579,7 +579,7 @@ changes the commit subject.
 optional `label=`, and `float=` to customize its caption and placement.
 
 ```sh
-compose-text --banner 'text=RELEASE;style=box;width=11;float=left' \
+cli-compose-text --banner 'text=RELEASE;style=box;width=11;float=left' \
   --badges 'labels=TESTED,READY;float=left'
 ```
 
